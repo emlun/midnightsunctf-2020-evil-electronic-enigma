@@ -16,23 +16,27 @@ pub type Value = Word;
 pub enum Opcode {
     Load = 0x0,
     LoadP = 0x1,
-    LoadC = 0x2,
 
-    Store = 0x3,
-    StoreP = 0x4,
+    Store = 0x2,
+    StoreP = 0x3,
 
-    Jz = 0x5,
-    JzP = 0x6,
-    Jos = 0x7,
-    JosP = 0x8,
-    Jus = 0x9,
-    JusP = 0xA,
+    Mov = 0x4,
+    MovC = 0x5,
 
-    ShiftL = 0xB,
-    ShiftR = 0xC,
-    Gpi = 0xD,
-    Gpo = 0xE,
-    Alu = 0xF,
+    Jmp = 0x6,
+    JmpP = 0x7,
+    JmpR = 0x8,
+    JmpRP = 0x9,
+
+    ShiftL = 0xA,
+    ShiftR = 0xB,
+
+    Gpi = 0xC,
+    Gpo = 0xD,
+
+    Alu = 0xE,
+
+    Halt = 0xF,
 }
 
 impl TryFrom<Word> for Opcode {
@@ -41,23 +45,27 @@ impl TryFrom<Word> for Opcode {
         match w {
             0x0 => Ok(Self::Load),
             0x1 => Ok(Self::LoadP),
-            0x2 => Ok(Self::LoadC),
 
-            0x3 => Ok(Self::Store),
-            0x4 => Ok(Self::StoreP),
+            0x2 => Ok(Self::Store),
+            0x3 => Ok(Self::StoreP),
 
-            0x5 => Ok(Self::Jz),
-            0x6 => Ok(Self::JzP),
-            0x7 => Ok(Self::Jos),
-            0x8 => Ok(Self::JosP),
-            0x9 => Ok(Self::Jus),
-            0xA => Ok(Self::JusP),
+            0x4 => Ok(Self::Mov),
+            0x5 => Ok(Self::MovC),
 
-            0xB => Ok(Self::ShiftL),
-            0xC => Ok(Self::ShiftR),
-            0xD => Ok(Self::Gpi),
-            0xE => Ok(Self::Gpo),
-            0xF => Ok(Self::Alu),
+            0x6 => Ok(Self::Jmp),
+            0x7 => Ok(Self::JmpP),
+            0x8 => Ok(Self::JmpR),
+            0x9 => Ok(Self::JmpRP),
+
+            0xA => Ok(Self::ShiftL),
+            0xB => Ok(Self::ShiftR),
+
+            0xC => Ok(Self::Gpi),
+            0xD => Ok(Self::Gpo),
+
+            0xE => Ok(Self::Alu),
+
+            0xF => Ok(Self::Halt),
 
             other => Err(format!("Invalid opcode: {}", other)),
         }
@@ -100,10 +108,12 @@ impl FromStr for RegisterRef {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AluOpcode {
     Add = 0b0000,
     AddCarry = 0b0001,
+    Incr = 0b0010,
+    Decr = 0b0011,
     Xor = 0b0100,
     Or = 0b1000,
     And = 0b1001,
@@ -118,6 +128,8 @@ impl TryFrom<Word> for AluOpcode {
         match w {
             0b0000 => Ok(Self::Add),
             0b0001 => Ok(Self::AddCarry),
+            0b0010 => Ok(Self::Incr),
+            0b0011 => Ok(Self::Decr),
             0b0100 => Ok(Self::Xor),
             0b1000 => Ok(Self::Or),
             0b1001 => Ok(Self::And),
@@ -135,6 +147,8 @@ impl FromStr for AluOpcode {
         match s {
             "ADD" => Ok(AluOpcode::Add),
             "ADDC" => Ok(AluOpcode::AddCarry),
+            "INCR" => Ok(AluOpcode::Incr),
+            "DECR" => Ok(AluOpcode::Decr),
             "XOR" => Ok(AluOpcode::Xor),
             "OR" => Ok(AluOpcode::Or),
             "AND" => Ok(AluOpcode::And),
@@ -146,19 +160,59 @@ impl FromStr for AluOpcode {
     }
 }
 
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub enum AluFlagRef {
+    Zero = 0,
+    OverflowUnsigned = 1,
+    OverflowSigned = 2,
+}
+
+impl TryFrom<Word> for AluFlagRef {
+    type Error = String;
+    fn try_from(w: Word) -> Result<Self, Self::Error> {
+        match w {
+            0 => Ok(Self::Zero),
+            1 => Ok(Self::OverflowUnsigned),
+            2 => Ok(Self::OverflowSigned),
+            other => Err(format!("Invalid flag: {}", other)),
+        }
+    }
+}
+
+impl FromStr for AluFlagRef {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Z" => Ok(AluFlagRef::Zero),
+            "Ou" => Ok(AluFlagRef::OverflowUnsigned),
+            "Os" => Ok(AluFlagRef::OverflowSigned),
+            other => Err(format!("Invalid flag: {}", other)),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct AluFlags {
     pub eq_zero: bool,
-    pub overflow_signed: bool,
     pub overflow_unsigned: bool,
+    pub overflow_signed: bool,
 }
 
 impl AluFlags {
     fn new() -> AluFlags {
         AluFlags {
             eq_zero: false,
-            overflow_signed: false,
             overflow_unsigned: false,
+            overflow_signed: false,
+        }
+    }
+
+    fn get(&self, flag: &AluFlagRef) -> bool {
+        match *flag {
+            AluFlagRef::Zero => self.eq_zero,
+            AluFlagRef::OverflowUnsigned => self.overflow_unsigned,
+            AluFlagRef::OverflowSigned => self.overflow_signed,
         }
     }
 }
@@ -170,8 +224,8 @@ impl Display for AluFlags {
             "[{}]",
             vec![
                 ("Z", self.eq_zero),
-                ("Os", self.overflow_signed),
                 ("Ou", self.overflow_unsigned),
+                ("Os", self.overflow_signed),
             ]
             .into_iter()
             .filter(|(_, b)| *b)
@@ -216,68 +270,78 @@ impl Display for Registers {
     }
 }
 
+#[derive(Eq, PartialEq)]
 pub enum Instruction {
     Load {
-        reg: RegisterRef,
+        dest: RegisterRef,
         addr: Address,
     },
     LoadP {
-        reg: RegisterRef,
-        addr_reg: RegisterRef,
-    },
-    LoadC {
-        reg: RegisterRef,
-        val: Value,
+        dest: RegisterRef,
+        addr_src: RegisterRef,
     },
 
     Store {
-        reg: RegisterRef,
+        src: RegisterRef,
         addr: Address,
     },
     StoreP {
-        reg: RegisterRef,
-        addr_reg: RegisterRef,
+        src: RegisterRef,
+        addr_src: RegisterRef,
     },
 
-    Jz {
+    Mov {
+        dest: RegisterRef,
+        src: RegisterRef,
+    },
+    MovC {
+        dest: RegisterRef,
+        val: Value,
+    },
+
+    Jmp {
+        flag: AluFlagRef,
         addr: Address,
     },
-    JzP {
-        addr_reg: RegisterRef,
+    JmpP {
+        flag: AluFlagRef,
+        addr_src: RegisterRef,
     },
-    Jos {
-        addr: Address,
+    JmpR {
+        flag: AluFlagRef,
+        diff: Value,
     },
-    JosP {
-        addr_reg: RegisterRef,
-    },
-    Jus {
-        addr: Address,
-    },
-    JusP {
-        addr_reg: RegisterRef,
+    JmpRP {
+        flag: AluFlagRef,
+        diff_src: RegisterRef,
     },
 
     ShiftL {
-        reg_in: RegisterRef,
-        reg_out: RegisterRef,
+        src: RegisterRef,
+        dest: RegisterRef,
+        amount: Value,
     },
     ShiftR {
-        reg_in: RegisterRef,
-        reg_out: RegisterRef,
+        src: RegisterRef,
+        dest: RegisterRef,
+        amount: Value,
     },
+
     Gpi {
-        reg: RegisterRef,
+        dest: RegisterRef,
     },
     Gpo {
-        reg: RegisterRef,
+        src: RegisterRef,
     },
+
     Alu {
         op: AluOpcode,
         arg1: RegisterRef,
         arg2: RegisterRef,
         out: RegisterRef,
     },
+
+    Halt,
 }
 
 impl TryFrom<(Word, Word)> for Instruction {
@@ -287,60 +351,75 @@ impl TryFrom<(Word, Word)> for Instruction {
 
         Ok(match opcode {
             Opcode::Load => Self::Load {
-                reg: (word1 & 0x3).try_into()?,
+                dest: (word1 & 0x3).try_into()?,
                 addr: word2,
             },
             Opcode::LoadP => Self::LoadP {
-                reg: (word1 & 0x3).try_into()?,
-                addr_reg: (word2 & 0x3).try_into()?,
-            },
-            Opcode::LoadC => Self::LoadC {
-                reg: (word1 & 0x3).try_into()?,
-                val: word2,
+                dest: (word1 & 0x3).try_into()?,
+                addr_src: (word2 & 0x3).try_into()?,
             },
 
             Opcode::Store => Self::Store {
-                reg: (word1 & 0x3).try_into()?,
+                src: (word1 & 0x3).try_into()?,
                 addr: word2,
             },
             Opcode::StoreP => Self::StoreP {
-                reg: (word1 & 0x3).try_into()?,
-                addr_reg: (word2 & 0x3).try_into()?,
+                src: (word1 & 0x3).try_into()?,
+                addr_src: (word2 & 0x3).try_into()?,
             },
 
-            Opcode::Jz => Self::Jz { addr: word2 },
-            Opcode::JzP => Self::JzP {
-                addr_reg: (word2 & 0x3).try_into()?,
+            Opcode::Mov => Self::Mov {
+                src: (word1 & 0x3).try_into()?,
+                dest: word2.try_into()?,
             },
-            Opcode::Jos => Self::Jos { addr: word2 },
-            Opcode::JosP => Self::JosP {
-                addr_reg: (word2 & 0x3).try_into()?,
+            Opcode::MovC => Self::MovC {
+                dest: (word1 & 0x3).try_into()?,
+                val: word2,
             },
-            Opcode::Jus => Self::Jus { addr: word2 },
-            Opcode::JusP => Self::JusP {
-                addr_reg: (word2 & 0x3).try_into()?,
+
+            Opcode::Jmp => Self::Jmp {
+                flag: (word1 & 0x3).try_into()?,
+                addr: word2,
+            },
+            Opcode::JmpP => Self::JmpP {
+                flag: (word1 & 0x3).try_into()?,
+                addr_src: (word2 & 0x3).try_into()?,
+            },
+            Opcode::JmpR => Self::JmpR {
+                flag: (word1 & 0x3).try_into()?,
+                diff: word2,
+            },
+            Opcode::JmpRP => Self::JmpRP {
+                flag: (word1 & 0x3).try_into()?,
+                diff_src: (word2 & 0x3).try_into()?,
             },
 
             Opcode::ShiftL => Self::ShiftL {
-                reg_in: ((word2 >> 4) & 0x3).try_into()?,
-                reg_out: (word2 & 0x3).try_into()?,
+                src: ((word1 >> 2) & 0x3).try_into()?,
+                dest: (word1 & 0x3).try_into()?,
+                amount: word2,
             },
             Opcode::ShiftR => Self::ShiftR {
-                reg_in: ((word2 >> 4) & 0x3).try_into()?,
-                reg_out: (word2 & 0x3).try_into()?,
+                src: ((word1 >> 2) & 0x3).try_into()?,
+                dest: (word1 & 0x3).try_into()?,
+                amount: word2,
             },
+
             Opcode::Gpi => Self::Gpi {
-                reg: (word2 & 0x3).try_into()?,
+                dest: (word2 & 0x3).try_into()?,
             },
             Opcode::Gpo => Self::Gpo {
-                reg: (word2 & 0x3).try_into()?,
+                src: (word2 & 0x3).try_into()?,
             },
+
             Opcode::Alu => Self::Alu {
                 op: (word1 & 0xf).try_into()?,
                 arg1: (word2 >> 6).try_into()?,
                 arg2: ((word2 >> 4) & 0x3).try_into()?,
                 out: (word2 & 0x3).try_into()?,
             },
+
+            Opcode::Halt => Self::Halt,
         })
     }
 }
@@ -351,15 +430,8 @@ impl Into<(Word, Word)> for &Instruction {
             (((opcode as u8) << 4) | (*word1_tail as u8), word2)
         }
 
-        fn pack2(
-            opcode: Opcode,
-            word2_front: &RegisterRef,
-            word2_tail: &RegisterRef,
-        ) -> (Word, Word) {
-            (
-                ((opcode as u8) << 4),
-                ((*word2_front as u8) << 4) | (*word2_tail as u8),
-            )
+        fn packf(opcode: Opcode, word1_tail: &AluFlagRef, word2: Word) -> (Word, Word) {
+            (((opcode as u8) << 4) | (*word1_tail as u8), word2)
         }
 
         fn cat(opcode: Opcode, word2: Word) -> (Word, Word) {
@@ -367,24 +439,32 @@ impl Into<(Word, Word)> for &Instruction {
         }
 
         match self {
-            Instruction::Load { reg, addr } => pack(Opcode::Load, reg, *addr),
-            Instruction::LoadP { reg, addr_reg } => pack(Opcode::LoadP, reg, *addr_reg as u8),
-            Instruction::LoadC { reg, val } => pack(Opcode::LoadC, reg, *val),
+            Instruction::Load { dest, addr } => pack(Opcode::Load, dest, *addr),
+            Instruction::LoadP { dest, addr_src } => pack(Opcode::LoadP, dest, *addr_src as u8),
 
-            Instruction::Store { reg, addr } => pack(Opcode::Store, reg, *addr),
-            Instruction::StoreP { reg, addr_reg } => pack(Opcode::StoreP, reg, *addr_reg as u8),
+            Instruction::Store { src, addr } => pack(Opcode::Store, src, *addr),
+            Instruction::StoreP { src, addr_src } => pack(Opcode::StoreP, src, *addr_src as u8),
 
-            Instruction::Jz { addr } => cat(Opcode::Jz, *addr),
-            Instruction::JzP { addr_reg } => cat(Opcode::JzP, *addr_reg as u8),
-            Instruction::Jos { addr } => cat(Opcode::Jos, *addr),
-            Instruction::JosP { addr_reg } => cat(Opcode::JosP, *addr_reg as u8),
-            Instruction::Jus { addr } => cat(Opcode::Jus, *addr),
-            Instruction::JusP { addr_reg } => cat(Opcode::JusP, *addr_reg as u8),
+            Instruction::Mov { dest, src } => pack(Opcode::Mov, dest, *src as u8),
+            Instruction::MovC { dest, val } => pack(Opcode::MovC, dest, *val),
 
-            Instruction::ShiftL { reg_in, reg_out } => pack2(Opcode::ShiftL, reg_in, reg_out),
-            Instruction::ShiftR { reg_in, reg_out } => pack2(Opcode::ShiftR, reg_in, reg_out),
-            Instruction::Gpi { reg } => cat(Opcode::Gpi, *reg as u8),
-            Instruction::Gpo { reg } => cat(Opcode::Gpo, *reg as u8),
+            Instruction::Jmp { flag, addr } => packf(Opcode::Jmp, flag, *addr),
+            Instruction::JmpP { flag, addr_src } => packf(Opcode::JmpP, flag, *addr_src as u8),
+            Instruction::JmpR { flag, diff } => packf(Opcode::JmpR, flag, *diff),
+            Instruction::JmpRP { flag, diff_src } => packf(Opcode::JmpRP, flag, *diff_src as u8),
+
+            Instruction::ShiftL { src, dest, amount } => (
+                ((Opcode::ShiftL as u8) << 4) | ((*src as u8) << 2) | (*dest as u8),
+                *amount,
+            ),
+            Instruction::ShiftR { src, dest, amount } => (
+                ((Opcode::ShiftL as u8) << 4) | ((*src as u8) << 2) | (*dest as u8),
+                *amount,
+            ),
+
+            Instruction::Gpi { dest } => cat(Opcode::Gpi, *dest as u8),
+            Instruction::Gpo { src } => cat(Opcode::Gpo, *src as u8),
+
             Instruction::Alu {
                 op,
                 arg1,
@@ -394,6 +474,8 @@ impl Into<(Word, Word)> for &Instruction {
                 ((Opcode::Alu as u8) << 4) | (*op as u8),
                 ((*arg1 as u8) << 6) | ((*arg2 as u8) << 6) | (*out as u8),
             ),
+
+            Instruction::Halt => cat(Opcode::Halt, 0),
         }
     }
 }
@@ -403,74 +485,82 @@ impl FromStr for Instruction {
     fn from_str(line: &str) -> Result<Instruction, Self::Err> {
         let line_words: Vec<&str> = line.split(" ").collect();
 
-        fn parse_addr(s: &str) -> Result<Word, String> {
-            s.parse()
-                .map_err(|_| format!("Invalid memory address: {}", s))
+        fn parse_word(s: &str) -> Result<Word, String> {
+            let w: i16 = s.parse().map_err(|_| format!("Invalid word: {}", s))?;
+            Ok(((w + 256) & 0xff) as Word)
         }
 
-        Ok(match line_words[0] {
-            "LOAD" => Self::Load {
-                reg: line_words[1].parse()?,
-                addr: parse_addr(line_words[2])?,
+        Ok(match &line_words[..] {
+            ["LOAD", addr, "TO", dest] => Self::Load {
+                addr: parse_word(addr)?,
+                dest: dest.parse()?,
             },
-            "LOADP" => Self::LoadP {
-                reg: line_words[1].parse()?,
-                addr_reg: line_words[2].parse()?,
-            },
-            "LOADC" => Self::LoadC {
-                reg: line_words[1].parse()?,
-                val: parse_addr(line_words[2])?,
+            ["LOADP", addr_src, "TO", dest] => Self::LoadP {
+                addr_src: addr_src.parse()?,
+                dest: dest.parse()?,
             },
 
-            "STORE" => Self::Store {
-                reg: line_words[1].parse()?,
-                addr: parse_addr(line_words[2])?,
+            ["STORE", src, "AT", addr] => Self::Store {
+                src: src.parse()?,
+                addr: parse_word(addr)?,
             },
-            "STOREP" => Self::StoreP {
-                reg: line_words[1].parse()?,
-                addr_reg: line_words[2].parse()?,
-            },
-
-            "JZ" => Self::Jz {
-                addr: parse_addr(line_words[1])?,
-            },
-            "JZP" => Self::JzP {
-                addr_reg: line_words[1].parse()?,
-            },
-            "JOS" => Self::Jos {
-                addr: parse_addr(line_words[1])?,
-            },
-            "JOSP" => Self::JosP {
-                addr_reg: line_words[1].parse()?,
-            },
-            "JUS" => Self::Jus {
-                addr: parse_addr(line_words[1])?,
-            },
-            "JUSP" => Self::JusP {
-                addr_reg: line_words[1].parse()?,
+            ["STOREP", src, "AT", addr_src] => Self::StoreP {
+                src: src.parse()?,
+                addr_src: addr_src.parse()?,
             },
 
-            "SHIFTL" => Self::ShiftL {
-                reg_in: line_words[1].parse()?,
-                reg_out: line_words[2].parse()?,
+            ["MOV", src, "TO", dest] => Self::Mov {
+                src: src.parse()?,
+                dest: dest.parse()?,
             },
-            "SHIFTR" => Self::ShiftR {
-                reg_in: line_words[1].parse()?,
-                reg_out: line_words[2].parse()?,
+            ["MOVC", val, "INTO", dest] => Self::MovC {
+                val: parse_word(val)?,
+                dest: dest.parse()?,
             },
-            "GPI" => Self::Gpi {
-                reg: line_words[1].parse()?,
+
+            ["JMP", "IF", flag, "TO", addr] => Self::Jmp {
+                flag: flag.parse()?,
+                addr: parse_word(addr)?,
             },
-            "GPO" => Self::Gpo {
-                reg: line_words[1].parse()?,
+            ["JMPP", "IF", flag, "TO", addr_src] => Self::JmpP {
+                flag: flag.parse()?,
+                addr_src: addr_src.parse()?,
             },
-            "ALU" => Self::Alu {
-                op: line_words[1].parse()?,
-                arg1: line_words[2].parse()?,
-                arg2: line_words[3].parse()?,
-                out: line_words[4].parse()?,
+            ["JMPR", "IF", flag, "BY", diff] => Self::JmpR {
+                flag: flag.parse()?,
+                diff: parse_word(diff)?,
             },
-            other => panic!("Invalid instruction name: {:?}", other),
+            ["JMPRP", "IF", flag, "BY", diff_src] => Self::JmpRP {
+                flag: flag.parse()?,
+                diff_src: diff_src.parse()?,
+            },
+
+            ["SHIFTL", amount, "FROM", src, "TO", dest] => Self::ShiftL {
+                amount: parse_word(amount)?,
+                src: src.parse()?,
+                dest: dest.parse()?,
+            },
+            ["SHIFTR", amount, "FROM", src, "TO", dest] => Self::ShiftR {
+                amount: parse_word(amount)?,
+                src: src.parse()?,
+                dest: dest.parse()?,
+            },
+
+            ["GPI", "TO", dest] => Self::Gpi {
+                dest: dest.parse()?,
+            },
+            ["GPO", "FROM", src] => Self::Gpo { src: src.parse()? },
+
+            ["ALU", op, arg1, arg2, out] => Self::Alu {
+                op: op.parse()?,
+                arg1: arg1.parse()?,
+                arg2: arg2.parse()?,
+                out: out.parse()?,
+            },
+
+            ["HALT"] => Self::Halt,
+
+            other => panic!("Invalid instruction: {:?}", other),
         })
     }
 }
@@ -512,6 +602,15 @@ impl LegComputer {
         }
     }
 
+    pub fn is_halted(&self) -> bool {
+        let instruction = Instruction::try_from((
+            self.prog[self.eip as usize],
+            self.prog[self.eip as usize + 1],
+        ))
+        .unwrap();
+        instruction == Instruction::Halt
+    }
+
     pub fn step(&mut self) -> () {
         let instruction = Instruction::try_from((
             self.prog[self.eip as usize],
@@ -520,87 +619,82 @@ impl LegComputer {
         .unwrap();
 
         match instruction {
-            Instruction::Load { reg, addr } => {
-                *self.registers.get_mut(reg) = self.prog[addr as usize];
+            Instruction::Load { dest, addr } => {
+                *self.registers.get_mut(dest) = self.prog[addr as usize];
                 self.eip += 2;
             }
-            Instruction::LoadP { reg, addr_reg } => {
-                *self.registers.get_mut(reg) = self.prog[self.registers.get(&addr_reg) as usize];
-                self.eip += 2;
-            }
-            Instruction::LoadC { reg, val } => {
-                *self.registers.get_mut(reg) = val;
+            Instruction::LoadP { dest, addr_src } => {
+                *self.registers.get_mut(dest) = self.prog[self.registers.get(&addr_src) as usize];
                 self.eip += 2;
             }
 
-            Instruction::Store { reg, addr } => {
-                self.prog[addr as usize] = self.registers.get(&reg);
+            Instruction::Store { src, addr } => {
+                self.prog[addr as usize] = self.registers.get(&src);
                 self.eip += 2;
             }
-            Instruction::StoreP { reg, addr_reg } => {
-                self.prog[self.registers.get(&addr_reg) as usize] = self.registers.get(&reg);
+            Instruction::StoreP { src, addr_src } => {
+                self.prog[self.registers.get(&addr_src) as usize] = self.registers.get(&src);
                 self.eip += 2;
             }
 
-            Instruction::Jz { addr } => {
-                if self.flags.eq_zero {
+            Instruction::Mov { src, dest } => {
+                *self.registers.get_mut(dest) = self.registers.get(&src);
+                self.eip += 2;
+            }
+            Instruction::MovC { dest, val } => {
+                *self.registers.get_mut(dest) = val;
+                self.eip += 2;
+            }
+
+            Instruction::Jmp { flag, addr } => {
+                if self.flags.get(&flag) {
                     self.eip = addr;
                 } else {
                     self.eip += 2;
                 }
             }
-            Instruction::JzP { addr_reg } => {
-                if self.flags.eq_zero {
-                    self.eip = self.prog[self.registers.get(&addr_reg) as usize];
+            Instruction::JmpP { flag, addr_src } => {
+                if self.flags.get(&flag) {
+                    self.eip = self.prog[self.registers.get(&addr_src) as usize];
                 } else {
                     self.eip += 2;
                 }
             }
-            Instruction::Jos { addr } => {
-                if self.flags.overflow_signed {
-                    self.eip = addr;
+            Instruction::JmpR { flag, diff } => {
+                if self.flags.get(&flag) {
+                    self.eip = (self.eip as i16 + diff as i16) as u8;
                 } else {
                     self.eip += 2;
                 }
             }
-            Instruction::JosP { addr_reg } => {
-                if self.flags.overflow_signed {
-                    self.eip = self.prog[self.registers.get(&addr_reg) as usize];
-                } else {
-                    self.eip += 2;
-                }
-            }
-            Instruction::Jus { addr } => {
-                if self.flags.overflow_unsigned {
-                    self.eip = addr;
-                } else {
-                    self.eip += 2;
-                }
-            }
-            Instruction::JusP { addr_reg } => {
-                if self.flags.overflow_unsigned {
-                    self.eip = self.prog[self.registers.get(&addr_reg) as usize];
+            Instruction::JmpRP { flag, diff_src } => {
+                if self.flags.get(&flag) {
+                    self.eip = (self.eip as i16
+                        + self.prog[self.registers.get(&diff_src) as usize] as i16)
+                        as u8;
                 } else {
                     self.eip += 2;
                 }
             }
 
-            Instruction::ShiftL { reg_in, reg_out } => {
-                *self.registers.get_mut(reg_out) = self.registers.get(&reg_in) << 1;
+            Instruction::ShiftL { src, dest, amount } => {
+                *self.registers.get_mut(dest) = self.registers.get(&src) << amount;
                 self.eip += 2;
             }
-            Instruction::ShiftR { reg_in, reg_out } => {
-                *self.registers.get_mut(reg_out) = self.registers.get(&reg_in) >> 1;
+            Instruction::ShiftR { src, dest, amount } => {
+                *self.registers.get_mut(dest) = self.registers.get(&src) >> amount;
                 self.eip += 2;
             }
-            Instruction::Gpi { reg } => {
-                *self.registers.get_mut(reg) = self.reg_i;
+
+            Instruction::Gpi { dest } => {
+                *self.registers.get_mut(dest) = self.reg_i;
                 self.eip += 2;
             }
-            Instruction::Gpo { reg } => {
-                self.reg_o = self.registers.get(&reg);
+            Instruction::Gpo { src } => {
+                self.reg_o = self.registers.get(&src);
                 self.eip += 2;
             }
+
             Instruction::Alu {
                 op,
                 arg1,
@@ -660,6 +754,24 @@ impl LegComputer {
                         }
                     }
 
+                    AluOpcode::Incr => {
+                        let arg1: u16 = self.registers.get(&arg1) as u16;
+                        let result: u16 = (arg1 + 1) & 0xff;
+
+                        *self.registers.get_mut(out) = result as u8;
+                        self.flags.overflow_unsigned = result == 0x00;
+                        self.flags.overflow_signed = result == 0x80;
+                    }
+
+                    AluOpcode::Decr => {
+                        let arg1: u16 = self.registers.get(&arg1) as u16;
+                        let result: u16 = (arg1 + 256 - 1) & 0xff;
+
+                        *self.registers.get_mut(out) = result as u8;
+                        self.flags.overflow_unsigned = result == 0xff;
+                        self.flags.overflow_signed = result == 0x7f;
+                    }
+
                     AluOpcode::Xor => {
                         *self.registers.get_mut(out) =
                             self.registers.get(&arg1) ^ self.registers.get(&arg2);
@@ -688,6 +800,8 @@ impl LegComputer {
                 self.flags.eq_zero = self.registers.get(&out) == 0;
                 self.eip += 2;
             }
+
+            Instruction::Halt => {}
         };
     }
 }

@@ -1,41 +1,39 @@
 use leg_simulator::LegComputer;
 
 fn main() -> Result<(), String> {
-    let test = "
-        LOADC A 42
-        LOADC B 43
-        LOADC C 44
-        LOADC D 45
-    ";
-
     let fibonacci = "
-LOADC A 0
-LOADC D 100
-STOREP A D
-LOADC B 1
-ALU ADD B D D
-STOREP B D
+MOVC 0 INTO A
+MOVC 100 INTO D
+STOREP A AT D
+ALU INCR D D D
+MOVC 1 INTO B
+STOREP B AT D
 
-LOADP B D
-LOADC A 255
-ALU ADD A D D
-LOADP A D
+LOADP D TO B
+ALU DECR D D D
+LOADP D TO A
 ALU ADD A B C
-LOADC A 2
-ALU ADD A D D
-STOREP C D
 
-LOADC A 0
+JMPR IF Ou BY 14
+
+ALU INCR D D D
+ALU INCR D D D
+STOREP C AT D
+
+MOVC 0 INTO A
 ALU ECHO A A A
-JZ 12
+JMPR IF Z BY -20
+
+HALT
     ";
 
     let source = fibonacci;
 
     let mut computer: LegComputer = source.parse()?;
 
-    loop {
+    while !computer.is_halted() {
         println!("{}\n", computer);
         computer.step();
     }
+    Ok(())
 }
