@@ -29,11 +29,9 @@ HALT
 
     let source = fibonacci;
 
-    let mut computer: LegComputer = source.parse()?;
+    let computer: LegComputer = source.parse()?;
+    let computer = computer.run();
+    println!("{}\n", computer);
 
-    while !computer.is_halted() {
-        println!("{}\n", computer);
-        computer.step();
-    }
     Ok(())
 }

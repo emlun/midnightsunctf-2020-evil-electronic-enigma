@@ -611,6 +611,13 @@ impl LegComputer {
         instruction == Instruction::Halt
     }
 
+    pub fn run(mut self) -> Self {
+        while !self.is_halted() {
+            self.step();
+        }
+        self
+    }
+
     pub fn step(&mut self) -> () {
         let instruction = Instruction::try_from((
             self.prog[self.eip as usize],
