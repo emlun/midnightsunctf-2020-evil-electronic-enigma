@@ -2,27 +2,27 @@ use leg_simulator::LegComputer;
 
 fn main() -> Result<(), String> {
     let fibonacci = "
-MOVC 0 INTO A
-MOVC 100 INTO D
-STOREP A AT D
+MOVC 0 => A
+MOVC 100 => D
+STOREP A => D
 ALU INCR D D D
-MOVC 1 INTO B
-STOREP B AT D
+MOVC 1 => B
+STOREP B => D
 
-LOADP D TO B
+LOADP D => B
 ALU DECR D D D
-LOADP D TO A
+LOADP D => A
 ALU ADD A B C
 
-JMPR IF Ou BY 14
+JMPR Ou ? 14
 
 ALU INCR D D D
 ALU INCR D D D
-STOREP C AT D
+STOREP C => D
 
-MOVC 0 INTO A
+MOVC 0 => A
 ALU ECHO A A A
-JMPR IF Z BY -20
+JMPR Z ? -20
 
 HALT
     ";

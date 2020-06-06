@@ -491,65 +491,65 @@ impl FromStr for Instruction {
         }
 
         Ok(match &line_words[..] {
-            ["LOAD", addr, "TO", dest] => Self::Load {
+            ["LOAD", addr, "=>", dest] => Self::Load {
                 addr: parse_word(addr)?,
                 dest: dest.parse()?,
             },
-            ["LOADP", addr_src, "TO", dest] => Self::LoadP {
+            ["LOADP", addr_src, "=>", dest] => Self::LoadP {
                 addr_src: addr_src.parse()?,
                 dest: dest.parse()?,
             },
 
-            ["STORE", src, "AT", addr] => Self::Store {
+            ["STORE", src, "=>", addr] => Self::Store {
                 src: src.parse()?,
                 addr: parse_word(addr)?,
             },
-            ["STOREP", src, "AT", addr_src] => Self::StoreP {
+            ["STOREP", src, "=>", addr_src] => Self::StoreP {
                 src: src.parse()?,
                 addr_src: addr_src.parse()?,
             },
 
-            ["MOV", src, "TO", dest] => Self::Mov {
+            ["MOV", src, "=>", dest] => Self::Mov {
                 src: src.parse()?,
                 dest: dest.parse()?,
             },
-            ["MOVC", val, "INTO", dest] => Self::MovC {
+            ["MOVC", val, "=>", dest] => Self::MovC {
                 val: parse_word(val)?,
                 dest: dest.parse()?,
             },
 
-            ["JMP", "IF", flag, "TO", addr] => Self::Jmp {
+            ["JMP", flag, "?", addr] => Self::Jmp {
                 flag: flag.parse()?,
                 addr: parse_word(addr)?,
             },
-            ["JMPP", "IF", flag, "TO", addr_src] => Self::JmpP {
+            ["JMPP", flag, "?", addr_src] => Self::JmpP {
                 flag: flag.parse()?,
                 addr_src: addr_src.parse()?,
             },
-            ["JMPR", "IF", flag, "BY", diff] => Self::JmpR {
+            ["JMPR", flag, "?", diff] => Self::JmpR {
                 flag: flag.parse()?,
                 diff: parse_word(diff)?,
             },
-            ["JMPRP", "IF", flag, "BY", diff_src] => Self::JmpRP {
+            ["JMPRP", flag, "?", diff_src] => Self::JmpRP {
                 flag: flag.parse()?,
                 diff_src: diff_src.parse()?,
             },
 
-            ["SHIFTL", amount, "FROM", src, "TO", dest] => Self::ShiftL {
+            ["SHIFTL", amount, "OF", src, "=>", dest] => Self::ShiftL {
                 amount: parse_word(amount)?,
                 src: src.parse()?,
                 dest: dest.parse()?,
             },
-            ["SHIFTR", amount, "FROM", src, "TO", dest] => Self::ShiftR {
+            ["SHIFTR", amount, "OF", src, "=>", dest] => Self::ShiftR {
                 amount: parse_word(amount)?,
                 src: src.parse()?,
                 dest: dest.parse()?,
             },
 
-            ["GPI", "TO", dest] => Self::Gpi {
+            ["GPI", dest, "<="] => Self::Gpi {
                 dest: dest.parse()?,
             },
-            ["GPO", "FROM", src] => Self::Gpo { src: src.parse()? },
+            ["GPO", src, "=>"] => Self::Gpo { src: src.parse()? },
 
             ["ALU", op, arg1, arg2, out] => Self::Alu {
                 op: op.parse()?,
