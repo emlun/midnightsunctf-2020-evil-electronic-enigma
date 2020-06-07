@@ -163,18 +163,22 @@ impl FromStr for AluOpcode {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub enum AluFlagRef {
-    Zero = 0,
-    OverflowUnsigned = 1,
-    OverflowSigned = 2,
+    False = 0,
+    True = 1,
+    EqZero = 2,
+    OverflowUnsigned = 3,
+    OverflowSigned = 4,
 }
 
 impl TryFrom<Word> for AluFlagRef {
     type Error = String;
     fn try_from(w: Word) -> Result<Self, Self::Error> {
         match w {
-            0 => Ok(Self::Zero),
-            1 => Ok(Self::OverflowUnsigned),
-            2 => Ok(Self::OverflowSigned),
+            0 => Ok(Self::False),
+            1 => Ok(Self::True),
+            2 => Ok(Self::EqZero),
+            3 => Ok(Self::OverflowUnsigned),
+            4 => Ok(Self::OverflowSigned),
             other => Err(format!("Invalid flag: {}", other)),
         }
     }
@@ -184,7 +188,9 @@ impl FromStr for AluFlagRef {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Z" => Ok(AluFlagRef::Zero),
+            "F" => Ok(AluFlagRef::False),
+            "T" => Ok(AluFlagRef::True),
+            "Z" => Ok(AluFlagRef::EqZero),
             "Ou" => Ok(AluFlagRef::OverflowUnsigned),
             "Os" => Ok(AluFlagRef::OverflowSigned),
             other => Err(format!("Invalid flag: {}", other)),
@@ -210,7 +216,9 @@ impl AluFlags {
 
     fn get(&self, flag: &AluFlagRef) -> bool {
         match *flag {
-            AluFlagRef::Zero => self.eq_zero,
+            AluFlagRef::False => false,
+            AluFlagRef::True => true,
+            AluFlagRef::EqZero => self.eq_zero,
             AluFlagRef::OverflowUnsigned => self.overflow_unsigned,
             AluFlagRef::OverflowSigned => self.overflow_signed,
         }
@@ -378,19 +386,19 @@ impl TryFrom<(Word, Word)> for Instruction {
             },
 
             Opcode::Jmp => Self::Jmp {
-                flag: (word1 & 0x3).try_into()?,
+                flag: (word1 & 0x7).try_into()?,
                 addr: word2,
             },
             Opcode::JmpP => Self::JmpP {
-                flag: (word1 & 0x3).try_into()?,
+                flag: (word1 & 0x7).try_into()?,
                 addr_src: (word2 & 0x3).try_into()?,
             },
             Opcode::JmpR => Self::JmpR {
-                flag: (word1 & 0x3).try_into()?,
+                flag: (word1 & 0x7).try_into()?,
                 diff: word2,
             },
             Opcode::JmpRP => Self::JmpRP {
-                flag: (word1 & 0x3).try_into()?,
+                flag: (word1 & 0x7).try_into()?,
                 diff_src: (word2 & 0x3).try_into()?,
             },
 
