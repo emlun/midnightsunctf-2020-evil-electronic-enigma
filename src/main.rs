@@ -1,37 +1,17 @@
 use leg_simulator::LegComputer;
+use std::io::Read;
 
-fn main() -> Result<(), String> {
-    let fibonacci = "
-    MOVC 0 => A
-    MOVC 100 => D
-    STOREP A => D
-    ALU INCR D D D
-    MOVC 1 => B
-    STOREP B => D
+fn main() -> () {
+    let mut input = std::io::stdin();
+    let source = {
+        let mut source = String::new();
+        input
+            .read_to_string(&mut source)
+            .expect("Failed to read source code");
+        source
+    };
 
-    LOADP D => B
-    ALU DECR D D D
-    LOADP D => A
-    ALU ADD A B C
-
-    JMPR Ou ? 14
-
-    ALU INCR D D D
-    ALU INCR D D D
-    STOREP C => D
-
-    MOVC 0 => A
-    ALU ECHO A A A
-    JMPR Z ? -20
-
-    HALT
-    ";
-
-    let source = fibonacci;
-
-    let computer: LegComputer = source.parse()?;
+    let computer: LegComputer = source.parse().expect("Failed to parse source code");
     let computer = computer.run();
     println!("{}\n", computer);
-
-    Ok(())
 }
