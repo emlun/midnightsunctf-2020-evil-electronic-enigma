@@ -568,7 +568,7 @@ impl FromStr for Instruction {
 #[derive(Clone, Debug)]
 pub struct LegComputer {
     pub eip: Word,
-    pub prog: Memory,
+    pub memory: Memory,
     pub flags: AluFlags,
     pub registers: Registers,
     pub reg_i: Word,
@@ -579,13 +579,13 @@ impl Display for LegComputer {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(
             f,
-            "{eip:03} {regs} {flags} [{reg_i} {reg_o}]\n{prog:?}",
+            "{eip:03} {regs} {flags} [{reg_i} {reg_o}]\n{memory:?}",
             eip = self.eip,
             regs = self.registers,
             flags = self.flags,
             reg_i = self.reg_i,
             reg_o = self.reg_o,
-            prog = self.prog,
+            memory = self.memory,
         )
     }
 }
@@ -594,7 +594,7 @@ impl LegComputer {
     pub fn new(program: Vec<Word>) -> LegComputer {
         LegComputer {
             eip: 0,
-            prog: program,
+            memory: program,
             flags: AluFlags::new(),
             registers: Registers::new(),
             reg_i: 0,
@@ -604,8 +604,8 @@ impl LegComputer {
 
     pub fn is_halted(&self) -> bool {
         let instruction = Instruction::try_from((
-            self.prog[self.eip as usize],
-            self.prog[self.eip as usize + 1],
+            self.memory[self.eip as usize],
+            self.memory[self.eip as usize + 1],
         ))
         .unwrap();
         instruction == Instruction::Halt
@@ -620,27 +620,27 @@ impl LegComputer {
 
     pub fn step(&mut self) -> () {
         let instruction = Instruction::try_from((
-            self.prog[self.eip as usize],
-            self.prog[self.eip as usize + 1],
+            self.memory[self.eip as usize],
+            self.memory[self.eip as usize + 1],
         ))
         .unwrap();
 
         match instruction {
             Instruction::Load { dest, addr } => {
-                *self.registers.get_mut(dest) = self.prog[addr as usize];
+                *self.registers.get_mut(dest) = self.memory[addr as usize];
                 self.eip += 2;
             }
             Instruction::LoadP { dest, addr_src } => {
-                *self.registers.get_mut(dest) = self.prog[self.registers.get(&addr_src) as usize];
+                *self.registers.get_mut(dest) = self.memory[self.registers.get(&addr_src) as usize];
                 self.eip += 2;
             }
 
             Instruction::Store { src, addr } => {
-                self.prog[addr as usize] = self.registers.get(&src);
+                self.memory[addr as usize] = self.registers.get(&src);
                 self.eip += 2;
             }
             Instruction::StoreP { src, addr_src } => {
-                self.prog[self.registers.get(&addr_src) as usize] = self.registers.get(&src);
+                self.memory[self.registers.get(&addr_src) as usize] = self.registers.get(&src);
                 self.eip += 2;
             }
 
@@ -662,7 +662,7 @@ impl LegComputer {
             }
             Instruction::JmpP { flag, addr_src } => {
                 if self.flags.get(&flag) {
-                    self.eip = self.prog[self.registers.get(&addr_src) as usize];
+                    self.eip = self.memory[self.registers.get(&addr_src) as usize];
                 } else {
                     self.eip += 2;
                 }
@@ -677,7 +677,7 @@ impl LegComputer {
             Instruction::JmpRP { flag, diff_src } => {
                 if self.flags.get(&flag) {
                     self.eip = (self.eip as i16
-                        + self.prog[self.registers.get(&diff_src) as usize] as i16)
+                        + self.memory[self.registers.get(&diff_src) as usize] as i16)
                         as u8;
                 } else {
                     self.eip += 2;
