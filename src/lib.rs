@@ -824,7 +824,7 @@ impl LegComputer {
 impl FromStr for LegComputer {
     type Err = String;
     fn from_str(source: &str) -> Result<LegComputer, Self::Err> {
-        let mut program = generate_code(&assemble_program(&source.lines().collect::<Vec<&str>>())?);
+        let mut program = generate_code(&assemble_program(source)?);
 
         let mut memory: Memory = Vec::with_capacity(256);
         memory.append(&mut program);
@@ -836,9 +836,9 @@ impl FromStr for LegComputer {
     }
 }
 
-pub fn assemble_program(lines: &[&str]) -> Result<Vec<Instruction>, String> {
-    lines
-        .iter()
+pub fn assemble_program(source: &str) -> Result<Vec<Instruction>, String> {
+    source
+        .lines()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .map(|s| s.parse())
