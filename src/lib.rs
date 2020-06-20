@@ -377,8 +377,8 @@ impl TryFrom<(Word, Word)> for Instruction {
             },
 
             Opcode::Mov => Self::Mov {
-                src: (word1 & 0x3).try_into()?,
-                dest: word2.try_into()?,
+                dest: (word1 & 0x3).try_into()?,
+                src: word2.try_into()?,
             },
             Opcode::MovC => Self::MovC {
                 dest: (word1 & 0x3).try_into()?,
