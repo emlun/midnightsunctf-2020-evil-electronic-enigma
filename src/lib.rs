@@ -480,7 +480,7 @@ impl Into<(Word, Word)> for &Instruction {
                 out,
             } => (
                 ((Opcode::Alu as u8) << 4) | (*op as u8),
-                ((*arg1 as u8) << 6) | ((*arg2 as u8) << 6) | (*out as u8),
+                ((*arg1 as u8) << 6) | ((*arg2 as u8) << 4) | (*out as u8),
             ),
 
             Instruction::Halt => cat(Opcode::Halt, 0),
