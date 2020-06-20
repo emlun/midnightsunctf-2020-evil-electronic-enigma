@@ -278,7 +278,7 @@ impl Display for Registers {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Instruction {
     Load {
         dest: RegisterRef,
@@ -587,14 +587,36 @@ impl Display for LegComputer {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(
             f,
-            "{eip:03} {regs} {flags} [{reg_i} {reg_o}]\n{memory:?}",
+            "{eip:03} {regs} {flags} [{reg_i} {reg_o}]\n",
             eip = self.eip,
             regs = self.registers,
             flags = self.flags,
             reg_i = self.reg_i,
             reg_o = self.reg_o,
-            memory = self.memory,
-        )
+        )?;
+
+        let instruction = Instruction::try_from((
+            self.memory[self.eip as usize],
+            self.memory[self.eip as usize + 1],
+        ))
+        .unwrap();
+
+        write!(f, "{:?}\n", instruction);
+
+        write!(f, "[")?;
+        for (i, v) in self.memory.iter().enumerate() {
+            if i == self.eip.into() {
+                write!(f, "{{ {}", v)?;
+            } else if i == (usize::from(self.eip) + 1) {
+                write!(f, "{} }}", v)?;
+            } else {
+                write!(f, "{}", v)?;
+            }
+            if i < (self.memory.len() - 1) {
+                write!(f, ", ")?;
+            }
+        }
+        write!(f, "]")
     }
 }
 
