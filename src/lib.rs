@@ -601,16 +601,18 @@ impl Display for LegComputer {
         ))
         .unwrap();
 
-        write!(f, "{:?}\n", instruction);
+        write!(f, "{:?}\n", instruction)?;
 
-        write!(f, "[")?;
         for (i, v) in self.memory.iter().enumerate() {
+            if i % 8 == 0 {
+                write!(f, "\n{:>3}: ", i)?;
+            }
             if i == self.eip.into() {
-                write!(f, "{{ {}", v)?;
+                write!(f, "{{ {:>4}", v)?;
             } else if i == (usize::from(self.eip) + 1) {
-                write!(f, "{} }}", v)?;
+                write!(f, "{:>4} }}", v)?;
             } else {
-                write!(f, "{}", v)?;
+                write!(f, "{:>6}", v)?;
             }
             if i < (self.memory.len() - 1) {
                 write!(f, ", ")?;
