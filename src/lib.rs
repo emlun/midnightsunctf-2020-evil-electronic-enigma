@@ -174,6 +174,16 @@ pub enum AluFlagRef {
     EqZero = 2,
     OverflowUnsigned = 3,
     OverflowSigned = 4,
+    Equal = 5,
+    NotEqual = 6,
+    GreaterThan = 7,
+    GreaterThanSigned = 8,
+    GreaterOrEqual = 9,
+    GreaterOrEqualSigned = 10,
+    LessThan = 11,
+    LessThanSigned = 12,
+    LessOrEqual = 13,
+    LessOrEqualSigned = 14,
 }
 
 impl TryFrom<Word> for AluFlagRef {
@@ -185,6 +195,16 @@ impl TryFrom<Word> for AluFlagRef {
             2 => Ok(Self::EqZero),
             3 => Ok(Self::OverflowUnsigned),
             4 => Ok(Self::OverflowSigned),
+            5 => Ok(Self::Equal),
+            6 => Ok(Self::NotEqual),
+            7 => Ok(Self::GreaterThan),
+            8 => Ok(Self::GreaterThanSigned),
+            9 => Ok(Self::GreaterOrEqual),
+            10 => Ok(Self::GreaterOrEqualSigned),
+            11 => Ok(Self::LessThan),
+            12 => Ok(Self::LessThanSigned),
+            13 => Ok(Self::LessOrEqual),
+            14 => Ok(Self::LessOrEqualSigned),
             other => Err(format!("Invalid flag: {}", other)),
         }
     }
@@ -199,6 +219,16 @@ impl FromStr for AluFlagRef {
             "Z" => Ok(AluFlagRef::EqZero),
             "Ou" => Ok(AluFlagRef::OverflowUnsigned),
             "Os" => Ok(AluFlagRef::OverflowSigned),
+            "EQ" => Ok(AluFlagRef::Equal),
+            "NE" => Ok(AluFlagRef::NotEqual),
+            "GT" => Ok(AluFlagRef::GreaterThan),
+            "GTs" => Ok(AluFlagRef::GreaterThanSigned),
+            "GE" => Ok(AluFlagRef::GreaterOrEqual),
+            "GEs" => Ok(AluFlagRef::GreaterOrEqualSigned),
+            "LT" => Ok(AluFlagRef::LessThan),
+            "LTs" => Ok(AluFlagRef::LessThanSigned),
+            "LE" => Ok(AluFlagRef::LessOrEqual),
+            "LEs" => Ok(AluFlagRef::LessOrEqualSigned),
             other => Err(format!("Invalid flag: {}", other)),
         }
     }
@@ -209,6 +239,16 @@ pub struct AluFlags {
     pub eq_zero: bool,
     pub overflow_unsigned: bool,
     pub overflow_signed: bool,
+    pub equal: bool,
+    pub not_equal: bool,
+    pub greater_than: bool,
+    pub greater_than_signed: bool,
+    pub greater_or_equal: bool,
+    pub greater_or_equal_signed: bool,
+    pub less_than: bool,
+    pub less_than_signed: bool,
+    pub less_or_equal: bool,
+    pub less_or_equal_signed: bool,
 }
 
 impl AluFlags {
@@ -217,6 +257,16 @@ impl AluFlags {
             eq_zero: false,
             overflow_unsigned: false,
             overflow_signed: false,
+            equal: false,
+            not_equal: false,
+            greater_than: false,
+            greater_than_signed: false,
+            greater_or_equal: false,
+            greater_or_equal_signed: false,
+            less_than: false,
+            less_than_signed: false,
+            less_or_equal: false,
+            less_or_equal_signed: false,
         }
     }
 
@@ -227,6 +277,16 @@ impl AluFlags {
             AluFlagRef::EqZero => self.eq_zero,
             AluFlagRef::OverflowUnsigned => self.overflow_unsigned,
             AluFlagRef::OverflowSigned => self.overflow_signed,
+            AluFlagRef::Equal => self.equal,
+            AluFlagRef::NotEqual => self.not_equal,
+            AluFlagRef::GreaterThan => self.greater_than,
+            AluFlagRef::GreaterThanSigned => self.greater_than_signed,
+            AluFlagRef::GreaterOrEqual => self.greater_or_equal,
+            AluFlagRef::GreaterOrEqualSigned => self.greater_or_equal_signed,
+            AluFlagRef::LessThan => self.less_than,
+            AluFlagRef::LessThanSigned => self.less_than_signed,
+            AluFlagRef::LessOrEqual => self.less_or_equal,
+            AluFlagRef::LessOrEqualSigned => self.less_or_equal_signed,
         }
     }
 }
@@ -240,6 +300,16 @@ impl Display for AluFlags {
                 ("Z", self.eq_zero),
                 ("Ou", self.overflow_unsigned),
                 ("Os", self.overflow_signed),
+                ("EQ", self.equal),
+                ("NE", self.not_equal),
+                ("GT", self.greater_than),
+                ("GTs", self.greater_than_signed),
+                ("GE", self.greater_or_equal),
+                ("GEs", self.greater_or_equal_signed),
+                ("LT", self.less_than),
+                ("LTs", self.less_than_signed),
+                ("LE", self.less_or_equal),
+                ("LEs", self.less_or_equal_signed),
             ]
             .into_iter()
             .filter(|(_, b)| *b)
@@ -848,7 +918,19 @@ impl LegComputer {
                         *self.registers.get_mut(out) = self.registers.get(&arg1);
                     }
                 };
+
                 self.flags.eq_zero = self.registers.get(&out) == 0;
+                self.flags.equal = self.registers.get(&arg1) == self.registers.get(&arg2);
+                self.flags.not_equal = !self.flags.equal;
+                self.flags.greater_than = arg1_unsigned > arg2_unsigned;
+                self.flags.greater_than_signed = arg1_signed > arg2_signed;
+                self.flags.greater_or_equal = arg1_unsigned >= arg2_unsigned;
+                self.flags.greater_or_equal_signed = arg1_signed >= arg2_signed;
+                self.flags.less_than = !self.flags.greater_or_equal;
+                self.flags.less_than_signed = !self.flags.greater_or_equal_signed;
+                self.flags.less_or_equal = !self.flags.greater_than;
+                self.flags.less_or_equal_signed = !self.flags.greater_than_signed;
+
                 self.eip += 2;
             }
 
