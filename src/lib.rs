@@ -746,22 +746,22 @@ impl LegComputer {
                 arg2,
                 out,
             } => {
+                let arg1_unsigned: u16 = self.registers.get(&arg1) as u16;
+                let arg2_unsigned: u16 = self.registers.get(&arg2) as u16;
+                let arg1_signed: i16 = if arg1_unsigned > 0x7f {
+                    (arg1_unsigned as i16) - 256
+                } else {
+                    arg1_unsigned as i16
+                };
+                let arg2_signed: i16 = if arg2_unsigned > 0x7f {
+                    (arg2_unsigned as i16) - 256
+                } else {
+                    arg2_unsigned as i16
+                };
+
                 match op {
                     AluOpcode::Add => {
-                        let arg1_unsigned: u16 = self.registers.get(&arg1) as u16;
-                        let arg2_unsigned: u16 = self.registers.get(&arg2) as u16;
                         let result_unsigned: u16 = arg1_unsigned + arg2_unsigned;
-
-                        let arg1_signed: i16 = if arg1_unsigned > 0x7f {
-                            (arg1_unsigned as i16) - 256
-                        } else {
-                            arg1_unsigned as i16
-                        };
-                        let arg2_signed: i16 = if arg2_unsigned > 0x7f {
-                            (arg2_unsigned as i16) - 256
-                        } else {
-                            arg2_unsigned as i16
-                        };
                         let result_signed: i16 = arg1_signed + arg2_signed;
 
                         *self.registers.get_mut(out) = (result_unsigned & 0xff) as u8;
@@ -774,20 +774,7 @@ impl LegComputer {
                     }
 
                     AluOpcode::AddCarry => {
-                        let arg1_unsigned: u16 = self.registers.get(&arg1) as u16;
-                        let arg2_unsigned: u16 = self.registers.get(&arg2) as u16;
                         let result_unsigned: u16 = arg1_unsigned + arg2_unsigned + 1;
-
-                        let arg1_signed: i16 = if arg1_unsigned > 0x7f {
-                            (arg1_unsigned as i16) - 256
-                        } else {
-                            arg1_unsigned as i16
-                        };
-                        let arg2_signed: i16 = if arg2_unsigned > 0x7f {
-                            (arg2_unsigned as i16) - 256
-                        } else {
-                            arg2_unsigned as i16
-                        };
                         let result_signed: i16 = arg1_signed + arg2_signed + 1;
 
                         *self.registers.get_mut(out) = (result_unsigned & 0xff) as u8;
@@ -828,21 +815,8 @@ impl LegComputer {
                     }
 
                     AluOpcode::Sub => {
-                        let arg1_unsigned: u16 = self.registers.get(&arg1) as u16;
-                        let arg2_unsigned: u16 = 256 - self.registers.get(&arg2) as u16;
-                        let result_unsigned: u16 = arg1_unsigned + arg2_unsigned;
-
-                        let arg1_signed: i16 = if arg1_unsigned > 0x7f {
-                            (arg1_unsigned as i16) - 256
-                        } else {
-                            arg1_unsigned as i16
-                        };
-                        let arg2_signed: i16 = if arg2_unsigned > 0x7f {
-                            (arg2_unsigned as i16) - 256
-                        } else {
-                            arg2_unsigned as i16
-                        };
-                        let result_signed: i16 = arg1_signed + arg2_signed;
+                        let result_unsigned: u16 = arg1_unsigned - arg2_unsigned;
+                        let result_signed: i16 = arg1_signed - arg2_signed;
 
                         *self.registers.get_mut(out) = (result_unsigned & 0xff) as u8;
                         if result_unsigned > 0xff {
