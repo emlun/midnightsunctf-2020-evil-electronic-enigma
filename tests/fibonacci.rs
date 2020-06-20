@@ -6,23 +6,23 @@ fn fibonacci() -> Result<(), String> {
     MOVC 0 => A
     MOVC 100 => D
     STOREP A => D
-    ALU INCR D D D
+    ALU INCR D D => D
     MOVC 1 => B
     STOREP B => D
 
     LOADP D => B
-    ALU DECR D D D
+    ALU DECR D D => D
     LOADP D => A
-    ALU ADD A B C
+    ALU ADD A B => C
 
     JMPR Ou ? 14
 
-    ALU INCR D D D
-    ALU INCR D D D
+    ALU INCR D D => D
+    ALU INCR D D => D
     STOREP C => D
 
     MOVC 0 => A
-    ALU ECHO A A A
+    ALU ECHO A A => A
     JMPR Z ? -20
 
     HALT

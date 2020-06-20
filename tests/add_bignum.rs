@@ -21,11 +21,11 @@ fn add_bignum() -> Result<(), String> {
     LOADP A => A
     LOAD 5 => B
     LOADP B => B
-    ALU ECHO D D D
+    ALU ECHO D D => D
     JMPR Z ? 6
-    ALU ADDC A B C
+    ALU ADDC A B => C
     JMPR T ? 4
-    ALU ADD A B C
+    ALU ADD A B => C
     MOVC 1 => D
     JMPR Ou ? 4
     MOVC 0 => D
@@ -37,15 +37,15 @@ fn add_bignum() -> Result<(), String> {
     STOREP C => B
 
     LOAD 2 => C
-    ALU XOR A C C
+    ALU XOR A C => C
     JMP Z ? 6
-    ALU DECR A A A
+    ALU DECR A A => A
     STORE A => 3
 
     LOAD 4 => C
-    ALU XOR B C C
+    ALU XOR B C => C
     JMP Z ? 6
-    ALU DECR B B B
+    ALU DECR B B => B
     STORE B => 5
 
     JMP T ? 10

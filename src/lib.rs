@@ -559,7 +559,7 @@ impl FromStr for Instruction {
             }),
             ["GPO", src, "=>"] => Ok(Self::Gpo { src: src.parse()? }),
 
-            ["ALU", op, arg1, arg2, out] => Ok(Self::Alu {
+            ["ALU", op, arg1, arg2, "=>", out] => Ok(Self::Alu {
                 op: op.parse()?,
                 arg1: arg1.parse()?,
                 arg2: arg2.parse()?,
