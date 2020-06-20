@@ -115,6 +115,8 @@ pub enum AluOpcode {
     Incr = 0b0010,
     Decr = 0b0011,
     Xor = 0b0100,
+    Neg = 0b0101,
+    Sub = 0b0110,
     Or = 0b1000,
     And = 0b1001,
     Nand = 0b1010,
@@ -131,6 +133,8 @@ impl TryFrom<Word> for AluOpcode {
             0b0010 => Ok(Self::Incr),
             0b0011 => Ok(Self::Decr),
             0b0100 => Ok(Self::Xor),
+            0b0101 => Ok(Self::Neg),
+            0b0110 => Ok(Self::Sub),
             0b1000 => Ok(Self::Or),
             0b1001 => Ok(Self::And),
             0b1010 => Ok(Self::Nand),
@@ -150,6 +154,8 @@ impl FromStr for AluOpcode {
             "INCR" => Ok(AluOpcode::Incr),
             "DECR" => Ok(AluOpcode::Decr),
             "XOR" => Ok(AluOpcode::Xor),
+            "NEG" => Ok(AluOpcode::Neg),
+            "SUB" => Ok(AluOpcode::Sub),
             "OR" => Ok(AluOpcode::Or),
             "AND" => Ok(AluOpcode::And),
             "NAND" => Ok(AluOpcode::Nand),
@@ -815,6 +821,38 @@ impl LegComputer {
                         *self.registers.get_mut(out) =
                             self.registers.get(&arg1) ^ self.registers.get(&arg2);
                     }
+
+                    AluOpcode::Neg => {
+                        *self.registers.get_mut(out) =
+                            (((self.registers.get(&arg1) ^ 0xff) as u16 + 1) & 0xff) as u8;
+                    }
+
+                    AluOpcode::Sub => {
+                        let arg1_unsigned: u16 = self.registers.get(&arg1) as u16;
+                        let arg2_unsigned: u16 = 256 - self.registers.get(&arg2) as u16;
+                        let result_unsigned: u16 = arg1_unsigned + arg2_unsigned;
+
+                        let arg1_signed: i16 = if arg1_unsigned > 0x7f {
+                            (arg1_unsigned as i16) - 256
+                        } else {
+                            arg1_unsigned as i16
+                        };
+                        let arg2_signed: i16 = if arg2_unsigned > 0x7f {
+                            (arg2_unsigned as i16) - 256
+                        } else {
+                            arg2_unsigned as i16
+                        };
+                        let result_signed: i16 = arg1_signed + arg2_signed;
+
+                        *self.registers.get_mut(out) = (result_unsigned & 0xff) as u8;
+                        if result_unsigned > 0xff {
+                            self.flags.overflow_unsigned = true;
+                        }
+                        if result_signed < -128 || result_signed > 127 {
+                            self.flags.overflow_signed = true;
+                        }
+                    }
+
                     AluOpcode::Or => {
                         *self.registers.get_mut(out) =
                             self.registers.get(&arg1) | self.registers.get(&arg2);
