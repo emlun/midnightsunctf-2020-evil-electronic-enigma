@@ -331,13 +331,19 @@ pub struct Registers {
 
 impl Registers {
     fn new() -> Registers {
-        Registers {
-            values: HashMap::new(),
-        }
+        let mut values = HashMap::new();
+        values.insert(RegisterRef::A, 0);
+        values.insert(RegisterRef::B, 0);
+        values.insert(RegisterRef::C, 0);
+        values.insert(RegisterRef::D, 0);
+        Registers { values }
     }
 
-    fn get(&self, reg: &RegisterRef) -> Word {
-        *self.values.get(reg).unwrap_or(&0)
+    pub fn get(&self, reg: &RegisterRef) -> Word {
+        *self
+            .values
+            .get(reg)
+            .expect(&format!("Register not set: {:?}", reg))
     }
 
     fn get_mut(&mut self, reg: RegisterRef) -> &mut Word {
