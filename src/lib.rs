@@ -79,6 +79,8 @@ pub enum RegisterRef {
     B = 1,
     C = 2,
     D = 3,
+    /// Instruction pointer
+    IP = 15,
 }
 
 impl TryFrom<Word> for RegisterRef {
@@ -89,6 +91,7 @@ impl TryFrom<Word> for RegisterRef {
             1 => Ok(Self::B),
             2 => Ok(Self::C),
             3 => Ok(Self::D),
+            15 => Ok(Self::IP),
             other => Err(format!("Invalid register: {}", other)),
         }
     }
@@ -102,6 +105,7 @@ impl FromStr for RegisterRef {
             "B" => Ok(Self::B),
             "C" => Ok(Self::C),
             "D" => Ok(Self::D),
+            "IP" => Ok(Self::IP),
             other => Err(format!("Invalid register: {}", other)),
         }
     }
@@ -345,11 +349,12 @@ impl Display for Registers {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(
             f,
-            "[A: {}, B: {}, C: {}, D: {}]",
+            "[A: {}, B: {}, C: {}, D: {}, IP: {}]",
             self.get(&RegisterRef::A),
             self.get(&RegisterRef::B),
             self.get(&RegisterRef::C),
             self.get(&RegisterRef::D),
+            self.get(&RegisterRef::IP),
         )
     }
 }
@@ -435,29 +440,29 @@ impl TryFrom<(Word, Word)> for Instruction {
 
         Ok(match opcode {
             Opcode::Load => Self::Load {
-                dest: (word1 & 0x3).try_into()?,
+                dest: (word1 & 0xf).try_into()?,
                 addr: word2,
             },
             Opcode::LoadP => Self::LoadP {
-                dest: (word1 & 0x3).try_into()?,
-                addr_src: (word2 & 0x3).try_into()?,
+                dest: (word1 & 0xf).try_into()?,
+                addr_src: (word2 & 0xf).try_into()?,
             },
 
             Opcode::Store => Self::Store {
-                src: (word1 & 0x3).try_into()?,
+                src: (word1 & 0xf).try_into()?,
                 addr: word2,
             },
             Opcode::StoreP => Self::StoreP {
-                src: (word1 & 0x3).try_into()?,
-                addr_src: (word2 & 0x3).try_into()?,
+                src: (word1 & 0xf).try_into()?,
+                addr_src: (word2 & 0xf).try_into()?,
             },
 
             Opcode::Mov => Self::Mov {
-                dest: (word1 & 0x3).try_into()?,
+                dest: (word1 & 0xf).try_into()?,
                 src: word2.try_into()?,
             },
             Opcode::MovC => Self::MovC {
-                dest: (word1 & 0x3).try_into()?,
+                dest: (word1 & 0xf).try_into()?,
                 val: word2,
             },
 
@@ -467,7 +472,7 @@ impl TryFrom<(Word, Word)> for Instruction {
             },
             Opcode::JmpP => Self::JmpP {
                 flag: (word1 & 0x7).try_into()?,
-                addr_src: (word2 & 0x3).try_into()?,
+                addr_src: (word2 & 0xf).try_into()?,
             },
             Opcode::JmpR => Self::JmpR {
                 flag: (word1 & 0x7).try_into()?,
@@ -475,25 +480,25 @@ impl TryFrom<(Word, Word)> for Instruction {
             },
             Opcode::JmpRP => Self::JmpRP {
                 flag: (word1 & 0x7).try_into()?,
-                diff_src: (word2 & 0x3).try_into()?,
+                diff_src: (word2 & 0xf).try_into()?,
             },
 
             Opcode::ShiftL => Self::ShiftL {
-                src: ((word1 >> 2) & 0x3).try_into()?,
-                dest: (word1 & 0x3).try_into()?,
-                amount: word2,
+                src: (word1 & 0xf).try_into()?,
+                dest: ((word2 >> 4) & 0xf).try_into()?,
+                amount: word2 & 0xf,
             },
             Opcode::ShiftR => Self::ShiftR {
-                src: ((word1 >> 2) & 0x3).try_into()?,
-                dest: (word1 & 0x3).try_into()?,
-                amount: word2,
+                src: (word1 & 0xf).try_into()?,
+                dest: ((word2 >> 4) & 0xf).try_into()?,
+                amount: word2 & 0xf,
             },
 
             Opcode::Gpi => Self::Gpi {
-                dest: (word2 & 0x3).try_into()?,
+                dest: (word2 & 0xf).try_into()?,
             },
             Opcode::Gpo => Self::Gpo {
-                src: (word2 & 0x3).try_into()?,
+                src: (word2 & 0xf).try_into()?,
             },
 
             Opcode::Alu => Self::Alu {
@@ -538,12 +543,12 @@ impl Into<(Word, Word)> for &Instruction {
             Instruction::JmpRP { flag, diff_src } => packf(Opcode::JmpRP, flag, *diff_src as u8),
 
             Instruction::ShiftL { src, dest, amount } => (
-                ((Opcode::ShiftL as u8) << 4) | ((*src as u8) << 2) | (*dest as u8),
-                *amount,
+                ((Opcode::ShiftL as u8) << 4) | (*src as u8),
+                ((*dest as u8) << 4) | (*amount & 0xf),
             ),
             Instruction::ShiftR { src, dest, amount } => (
-                ((Opcode::ShiftL as u8) << 4) | ((*src as u8) << 2) | (*dest as u8),
-                *amount,
+                ((Opcode::ShiftL as u8) << 4) | (*src as u8),
+                ((*dest as u8) << 4) | (*amount & 0xf),
             ),
 
             Instruction::Gpi { dest } => cat(Opcode::Gpi, *dest as u8),
