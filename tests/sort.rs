@@ -6,7 +6,7 @@ use rand::Rng;
 
 // Memory address 2, 3 contain start (inclusive), end (inclusive) of list
 // List is sorted in place
-const SOURCE: &str = "
+const BUBBLE_SORT: &str = "
 JMP T ? 8
 HALT
 HALT
@@ -45,6 +45,77 @@ JMPR T ? 4
 
 ALU INCR C C => C
 JMP T ? 16
+";
+
+// Memory address 2, 3 contain start (inclusive), end (inclusive) of list
+// List is sorted in place
+const QUICKSORT: &str = "
+JMP T ? 4
+HALT
+
+LOAD 2 => C
+LOAD 3 => D
+PUSH C
+PUSH D
+
+CALLC 16
+HALT
+
+# Subroutine: Carry the pivot forward
+
+# If start is past end, return
+SLOAD 3 => C
+SLOAD 2 => D
+ALU ECHO C D => C
+JMPR LT ? 4
+RET C
+
+MOV C => D
+
+# LOOP1:
+
+# If next was last element, recurse then return
+SLOAD 2 => A
+ALU ECHO D A => D
+JMPR NE ? 28
+
+PUSH C
+
+SLOAD 3 => A
+PUSH A
+ALU DECR C C => A
+PUSH A
+CALLC 16
+
+POP A
+ALU INCR A A => A
+PUSH A
+SLOAD 2 => A
+PUSH A
+CALLC 16
+
+RET C
+
+
+# Set next location
+ALU INCR D D => D
+
+# Load pivot and next
+LOADP C => A
+LOADP D => B
+
+# If pivot is greater than next, swap places
+ALU ECHO A B => A
+JMPR LE ? 12
+STOREP B => C
+# Put pivot after the swapped element
+ALU INCR C C => C
+LOADP C => B
+STOREP B => D
+STOREP A => C
+
+# Loop: LOOP1
+JMP T ? 28
 ";
 
 fn test_reversed_range(source: &str, range_len: Word) -> Result<(), String> {
@@ -115,10 +186,20 @@ fn test_random_list(source: &str, list_len: Word) -> Result<(), String> {
 
 #[test]
 fn bubble_sort() -> Result<(), String> {
-    test_reversed_range(SOURCE, 128)
+    test_reversed_range(BUBBLE_SORT, 128)
 }
 
 #[test]
 fn bubble_sort_random() -> Result<(), String> {
-    test_random_list(SOURCE, 128)
+    test_random_list(BUBBLE_SORT, 128)
+}
+
+#[test]
+fn quicksort() -> Result<(), String> {
+    test_reversed_range(QUICKSORT, 27)
+}
+
+#[test]
+fn quicksort_random() -> Result<(), String> {
+    test_random_list(QUICKSORT, 27)
 }
