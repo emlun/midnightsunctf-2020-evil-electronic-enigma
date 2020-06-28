@@ -394,15 +394,13 @@ impl Display for Registers {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(
             f,
-            "[A: {}, B: {}, C: {}, D: {}, FL: {}, ST: {}, BP: {}, IP: {}]",
+            "[A: {}, B: {}, C: {}, D: {}, ST: {}, BP: {}]",
             self.get(&RegisterRef::A),
             self.get(&RegisterRef::B),
             self.get(&RegisterRef::C),
             self.get(&RegisterRef::D),
-            self.get(&RegisterRef::FL),
             self.get(&RegisterRef::ST),
             self.get(&RegisterRef::BP),
-            self.get(&RegisterRef::IP),
         )
     }
 }
