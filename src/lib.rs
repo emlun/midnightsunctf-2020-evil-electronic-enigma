@@ -79,6 +79,8 @@ pub enum RegisterRef {
     B = 1,
     C = 2,
     D = 3,
+    /// First 8 flags
+    FL = 14,
     /// Instruction pointer
     IP = 15,
 }
@@ -91,6 +93,7 @@ impl TryFrom<Word> for RegisterRef {
             1 => Ok(Self::B),
             2 => Ok(Self::C),
             3 => Ok(Self::D),
+            14 => Ok(Self::FL),
             15 => Ok(Self::IP),
             other => Err(format!("Invalid register: {}", other)),
         }
@@ -105,6 +108,7 @@ impl FromStr for RegisterRef {
             "B" => Ok(Self::B),
             "C" => Ok(Self::C),
             "D" => Ok(Self::D),
+            "FL" => Ok(Self::FL),
             "IP" => Ok(Self::IP),
             other => Err(format!("Invalid register: {}", other)),
         }
@@ -173,42 +177,46 @@ impl FromStr for AluOpcode {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub enum AluFlagRef {
-    False = 0,
-    True = 1,
-    EqZero = 2,
-    OverflowUnsigned = 3,
-    OverflowSigned = 4,
-    Equal = 5,
-    NotEqual = 6,
-    GreaterThan = 7,
-    GreaterThanSigned = 8,
-    GreaterOrEqual = 9,
-    GreaterOrEqualSigned = 10,
-    LessThan = 11,
-    LessThanSigned = 12,
-    LessOrEqual = 13,
-    LessOrEqualSigned = 14,
+    EqZero = 0,
+    OverflowUnsigned = 1,
+    OverflowSigned = 2,
+    Equal = 3,
+    GreaterThan = 4,
+    GreaterThanSigned = 5,
+    GreaterOrEqual = 6,
+    GreaterOrEqualSigned = 7,
+
+    NotEqual = 8,
+    LessThan = 9,
+    LessThanSigned = 10,
+    LessOrEqual = 11,
+    LessOrEqualSigned = 12,
+
+    False = 14,
+    True = 15,
 }
 
 impl TryFrom<Word> for AluFlagRef {
     type Error = String;
     fn try_from(w: Word) -> Result<Self, Self::Error> {
         match w {
-            0 => Ok(Self::False),
-            1 => Ok(Self::True),
-            2 => Ok(Self::EqZero),
-            3 => Ok(Self::OverflowUnsigned),
-            4 => Ok(Self::OverflowSigned),
-            5 => Ok(Self::Equal),
-            6 => Ok(Self::NotEqual),
-            7 => Ok(Self::GreaterThan),
-            8 => Ok(Self::GreaterThanSigned),
-            9 => Ok(Self::GreaterOrEqual),
-            10 => Ok(Self::GreaterOrEqualSigned),
-            11 => Ok(Self::LessThan),
-            12 => Ok(Self::LessThanSigned),
-            13 => Ok(Self::LessOrEqual),
-            14 => Ok(Self::LessOrEqualSigned),
+            0 => Ok(Self::EqZero),
+            1 => Ok(Self::OverflowUnsigned),
+            2 => Ok(Self::OverflowSigned),
+            3 => Ok(Self::Equal),
+            4 => Ok(Self::GreaterThan),
+            5 => Ok(Self::GreaterThanSigned),
+            6 => Ok(Self::GreaterOrEqual),
+            7 => Ok(Self::GreaterOrEqualSigned),
+
+            8 => Ok(Self::NotEqual),
+            9 => Ok(Self::LessThan),
+            10 => Ok(Self::LessThanSigned),
+            11 => Ok(Self::LessOrEqual),
+            12 => Ok(Self::LessOrEqualSigned),
+
+            14 => Ok(Self::False),
+            15 => Ok(Self::True),
             other => Err(format!("Invalid flag: {}", other)),
         }
     }
@@ -218,21 +226,22 @@ impl FromStr for AluFlagRef {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "F" => Ok(AluFlagRef::False),
-            "T" => Ok(AluFlagRef::True),
             "Z" => Ok(AluFlagRef::EqZero),
             "Ou" => Ok(AluFlagRef::OverflowUnsigned),
             "Os" => Ok(AluFlagRef::OverflowSigned),
             "EQ" => Ok(AluFlagRef::Equal),
-            "NE" => Ok(AluFlagRef::NotEqual),
             "GT" => Ok(AluFlagRef::GreaterThan),
             "GTs" => Ok(AluFlagRef::GreaterThanSigned),
             "GE" => Ok(AluFlagRef::GreaterOrEqual),
             "GEs" => Ok(AluFlagRef::GreaterOrEqualSigned),
+
+            "NE" => Ok(AluFlagRef::NotEqual),
             "LT" => Ok(AluFlagRef::LessThan),
             "LTs" => Ok(AluFlagRef::LessThanSigned),
             "LE" => Ok(AluFlagRef::LessOrEqual),
             "LEs" => Ok(AluFlagRef::LessOrEqualSigned),
+            "F" => Ok(AluFlagRef::False),
+            "T" => Ok(AluFlagRef::True),
             other => Err(format!("Invalid flag: {}", other)),
         }
     }
@@ -244,11 +253,12 @@ pub struct AluFlags {
     pub overflow_unsigned: bool,
     pub overflow_signed: bool,
     pub equal: bool,
-    pub not_equal: bool,
     pub greater_than: bool,
     pub greater_than_signed: bool,
     pub greater_or_equal: bool,
     pub greater_or_equal_signed: bool,
+
+    pub not_equal: bool,
     pub less_than: bool,
     pub less_than_signed: bool,
     pub less_or_equal: bool,
@@ -262,11 +272,12 @@ impl AluFlags {
             overflow_unsigned: false,
             overflow_signed: false,
             equal: false,
-            not_equal: false,
             greater_than: false,
             greater_than_signed: false,
             greater_or_equal: false,
             greater_or_equal_signed: false,
+
+            not_equal: false,
             less_than: false,
             less_than_signed: false,
             less_or_equal: false,
@@ -276,22 +287,38 @@ impl AluFlags {
 
     fn get(&self, flag: &AluFlagRef) -> bool {
         match *flag {
-            AluFlagRef::False => false,
-            AluFlagRef::True => true,
             AluFlagRef::EqZero => self.eq_zero,
             AluFlagRef::OverflowUnsigned => self.overflow_unsigned,
             AluFlagRef::OverflowSigned => self.overflow_signed,
             AluFlagRef::Equal => self.equal,
-            AluFlagRef::NotEqual => self.not_equal,
             AluFlagRef::GreaterThan => self.greater_than,
             AluFlagRef::GreaterThanSigned => self.greater_than_signed,
             AluFlagRef::GreaterOrEqual => self.greater_or_equal,
             AluFlagRef::GreaterOrEqualSigned => self.greater_or_equal_signed,
+
+            AluFlagRef::NotEqual => self.not_equal,
             AluFlagRef::LessThan => self.less_than,
             AluFlagRef::LessThanSigned => self.less_than_signed,
             AluFlagRef::LessOrEqual => self.less_or_equal,
             AluFlagRef::LessOrEqualSigned => self.less_or_equal_signed,
+            AluFlagRef::False => false,
+            AluFlagRef::True => true,
         }
+    }
+
+    fn as_word(&self) -> Word {
+        (if self.eq_zero { 0x1 } else { 0 })
+            | (if self.overflow_unsigned { 0x2 } else { 0 })
+            | (if self.overflow_signed { 0x4 } else { 0 })
+            | (if self.equal { 0x8 } else { 0 })
+            | (if self.greater_than { 0x10 } else { 0 })
+            | (if self.greater_than_signed { 0x20 } else { 0 })
+            | (if self.greater_or_equal { 0x40 } else { 0 })
+            | (if self.greater_or_equal_signed {
+                0x80
+            } else {
+                0
+            })
     }
 }
 
@@ -305,11 +332,11 @@ impl Display for AluFlags {
                 ("Ou", self.overflow_unsigned),
                 ("Os", self.overflow_signed),
                 ("EQ", self.equal),
-                ("NE", self.not_equal),
                 ("GT", self.greater_than),
                 ("GTs", self.greater_than_signed),
                 ("GE", self.greater_or_equal),
                 ("GEs", self.greater_or_equal_signed),
+                ("NE", self.not_equal),
                 ("LT", self.less_than),
                 ("LTs", self.less_than_signed),
                 ("LE", self.less_or_equal),
@@ -355,11 +382,12 @@ impl Display for Registers {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(
             f,
-            "[A: {}, B: {}, C: {}, D: {}, IP: {}]",
+            "[A: {}, B: {}, C: {}, D: {}, FL: {}, IP: {}]",
             self.get(&RegisterRef::A),
             self.get(&RegisterRef::B),
             self.get(&RegisterRef::C),
             self.get(&RegisterRef::D),
+            self.get(&RegisterRef::FL),
             self.get(&RegisterRef::IP),
         )
     }
@@ -473,19 +501,19 @@ impl TryFrom<(Word, Word)> for Instruction {
             },
 
             Opcode::Jmp => Self::Jmp {
-                flag: (word1 & 0x7).try_into()?,
+                flag: (word1 & 0xf).try_into()?,
                 addr: word2,
             },
             Opcode::JmpP => Self::JmpP {
-                flag: (word1 & 0x7).try_into()?,
+                flag: (word1 & 0xf).try_into()?,
                 addr_src: (word2 & 0xf).try_into()?,
             },
             Opcode::JmpR => Self::JmpR {
-                flag: (word1 & 0x7).try_into()?,
+                flag: (word1 & 0xf).try_into()?,
                 diff: word2,
             },
             Opcode::JmpRP => Self::JmpRP {
-                flag: (word1 & 0x7).try_into()?,
+                flag: (word1 & 0xf).try_into()?,
                 diff_src: (word2 & 0xf).try_into()?,
             },
 
@@ -737,6 +765,14 @@ impl LegComputer {
         self
     }
 
+    pub fn read_register(&self, register: &RegisterRef) -> Word {
+        match register {
+            RegisterRef::FL => self.flags.as_word(),
+            RegisterRef::IP => self.eip,
+            _ => self.registers.get(register),
+        }
+    }
+
     pub fn step(&mut self) -> () {
         let instruction = Instruction::try_from((
             self.memory[self.eip as usize],
@@ -750,21 +786,22 @@ impl LegComputer {
                 self.eip += 2;
             }
             Instruction::LoadP { dest, addr_src } => {
-                *self.registers.get_mut(dest) = self.memory[self.registers.get(&addr_src) as usize];
+                *self.registers.get_mut(dest) = self.memory[self.read_register(&addr_src) as usize];
                 self.eip += 2;
             }
 
             Instruction::Store { src, addr } => {
-                self.memory[addr as usize] = self.registers.get(&src);
+                self.memory[addr as usize] = self.read_register(&src);
                 self.eip += 2;
             }
             Instruction::StoreP { src, addr_src } => {
-                self.memory[self.registers.get(&addr_src) as usize] = self.registers.get(&src);
+                let mem_index = self.read_register(&addr_src) as usize;
+                self.memory[mem_index] = self.read_register(&src);
                 self.eip += 2;
             }
 
             Instruction::Mov { src, dest } => {
-                *self.registers.get_mut(dest) = self.registers.get(&src);
+                *self.registers.get_mut(dest) = self.read_register(&src);
                 self.eip += 2;
             }
             Instruction::MovC { dest, val } => {
@@ -781,7 +818,7 @@ impl LegComputer {
             }
             Instruction::JmpP { flag, addr_src } => {
                 if self.flags.get(&flag) {
-                    self.eip = self.memory[self.registers.get(&addr_src) as usize];
+                    self.eip = self.memory[self.read_register(&addr_src) as usize];
                 } else {
                     self.eip += 2;
                 }
@@ -796,7 +833,7 @@ impl LegComputer {
             Instruction::JmpRP { flag, diff_src } => {
                 if self.flags.get(&flag) {
                     self.eip = (self.eip as i16
-                        + self.memory[self.registers.get(&diff_src) as usize] as i16)
+                        + self.memory[self.read_register(&diff_src) as usize] as i16)
                         as u8;
                 } else {
                     self.eip += 2;
@@ -804,11 +841,11 @@ impl LegComputer {
             }
 
             Instruction::ShiftL { src, dest, amount } => {
-                *self.registers.get_mut(dest) = self.registers.get(&src) << amount;
+                *self.registers.get_mut(dest) = self.read_register(&src) << amount;
                 self.eip += 2;
             }
             Instruction::ShiftR { src, dest, amount } => {
-                *self.registers.get_mut(dest) = self.registers.get(&src) >> amount;
+                *self.registers.get_mut(dest) = self.read_register(&src) >> amount;
                 self.eip += 2;
             }
 
@@ -817,7 +854,7 @@ impl LegComputer {
                 self.eip += 2;
             }
             Instruction::Gpo { src } => {
-                self.reg_o = self.registers.get(&src);
+                self.reg_o = self.read_register(&src);
                 self.eip += 2;
             }
 
