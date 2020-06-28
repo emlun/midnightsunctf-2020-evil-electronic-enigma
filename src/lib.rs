@@ -478,11 +478,12 @@ pub enum StackOpcode {
     Push = 0b0000,
     Pop = 0b0001,
     Call = 0b0010,
-    Ret = 0b0011,
-    LoadA = 0b0100,
-    LoadB = 0b0101,
-    LoadC = 0b0110,
-    LoadD = 0b0111,
+    CallC = 0b0011,
+    Ret = 0b0100,
+    LoadA = 0b1000,
+    LoadB = 0b1001,
+    LoadC = 0b1010,
+    LoadD = 0b1011,
 }
 
 impl TryFrom<Word> for StackOpcode {
@@ -492,12 +493,13 @@ impl TryFrom<Word> for StackOpcode {
             0b0000 => Ok(Self::Push),
             0b0001 => Ok(Self::Pop),
             0b0010 => Ok(Self::Call),
-            0b0011 => Ok(Self::Ret),
+            0b0011 => Ok(Self::CallC),
+            0b0100 => Ok(Self::Ret),
 
-            0b0100 => Ok(Self::LoadA),
-            0b0101 => Ok(Self::LoadB),
-            0b0110 => Ok(Self::LoadC),
-            0b0111 => Ok(Self::LoadD),
+            0b1000 => Ok(Self::LoadA),
+            0b1001 => Ok(Self::LoadB),
+            0b1010 => Ok(Self::LoadC),
+            0b1011 => Ok(Self::LoadD),
 
             other => Err(format!("Invalid stack opcode: {}", other)),
         }
@@ -528,6 +530,7 @@ pub enum StackInstruction {
     Pop { dest: RegisterRef },
     Load { dest: RegisterRef, bp_diff: Word },
     Call { addr_reg: RegisterRef },
+    CallC { addr: Word },
     Ret { src: RegisterRef },
 }
 
@@ -540,6 +543,7 @@ impl Into<(Word, Word)> for &StackInstruction {
             StackInstruction::Push { src } => cat(StackOpcode::Push, *src as u8),
             StackInstruction::Pop { dest } => cat(StackOpcode::Pop, *dest as u8),
             StackInstruction::Call { addr_reg } => cat(StackOpcode::Call, *addr_reg as u8),
+            StackInstruction::CallC { addr } => cat(StackOpcode::CallC, *addr),
             StackInstruction::Ret { src } => cat(StackOpcode::Ret, *src as u8),
             StackInstruction::Load { dest, bp_diff } => {
                 let opcode = match dest {
@@ -617,6 +621,7 @@ impl TryFrom<(Word, Word)> for Instruction {
                     StackOpcode::Call => StackInstruction::Call {
                         addr_reg: word2.try_into()?,
                     },
+                    StackOpcode::CallC => StackInstruction::CallC { addr: word2 },
                     StackOpcode::Ret => StackInstruction::Ret {
                         src: word2.try_into()?,
                     },
@@ -772,6 +777,9 @@ impl FromStr for Instruction {
             ["CALL", addr_reg] => Ok(Self::Stack(StackInstruction::Call {
                 addr_reg: addr_reg.parse()?,
             })),
+            ["CALLC", addr] => Ok(Self::Stack(StackInstruction::CallC {
+                addr: parse_word(addr)?,
+            })),
             ["RET", src] => Ok(Self::Stack(StackInstruction::Ret { src: src.parse()? })),
             ["SLOAD", bp_diff, "=>", dest] => Ok(Self::Stack(StackInstruction::Load {
                 dest: dest.parse()?,
@@ -896,6 +904,14 @@ impl LegComputer {
         result
     }
 
+    fn call(&mut self, addr: Word) -> () {
+        self.stack_push(self.eip);
+        self.stack_push(self.read_register(&RegisterRef::BP));
+        let current_st = self.read_register(&RegisterRef::ST);
+        *self.registers.get_mut(RegisterRef::BP) = current_st;
+        self.eip = addr;
+    }
+
     pub fn step(&mut self) -> () {
         let instruction = Instruction::try_from((
             self.memory[self.eip as usize],
@@ -974,11 +990,10 @@ impl LegComputer {
                     self.eip += 2;
                 }
                 StackInstruction::Call { addr_reg } => {
-                    self.stack_push(self.eip);
-                    self.stack_push(self.read_register(&RegisterRef::BP));
-                    let current_st = self.read_register(&RegisterRef::ST);
-                    *self.registers.get_mut(RegisterRef::BP) = current_st;
-                    self.eip = self.read_register(&addr_reg);
+                    self.call(self.read_register(&addr_reg));
+                }
+                StackInstruction::CallC { addr } => {
+                    self.call(addr);
                 }
                 StackInstruction::Ret { src } => {
                     let current_bp = self.read_register(&RegisterRef::BP);

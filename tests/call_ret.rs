@@ -80,9 +80,9 @@ fn call_ret() -> Result<(), String> {
     PUSH C
     PUSH D
 
-    MOVC 50 => D
-    CALL D
+    CALLC 50
 
+    NOP
     HALT
     HALT
     HALT
