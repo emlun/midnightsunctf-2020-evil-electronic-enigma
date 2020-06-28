@@ -843,13 +843,24 @@ impl Display for LegComputer {
             } else if i == (usize::from(self.eip) + 1) {
                 write!(f, "{:>4} }}", v)?;
             } else {
-                write!(f, "{:>6}", v)?;
+                let is_sp = i == usize::from(self.read_register(&RegisterRef::ST));
+                let is_bp = i == usize::from(self.read_register(&RegisterRef::BP));
+                if is_sp && is_bp {
+                    write!(f, "[ {:>2} ]", v)?;
+                } else if is_sp {
+                    write!(f, "[ {:>4}", v)?;
+                } else if is_bp {
+                    write!(f, "{:>4} ]", v)?;
+                } else {
+                    write!(f, "{:>6}", v)?;
+                }
             }
             if i < (self.memory.len() - 1) {
-                write!(f, ", ")?;
+                write!(f, "  ")?;
             }
         }
-        write!(f, "]")
+
+        Ok(())
     }
 }
 
