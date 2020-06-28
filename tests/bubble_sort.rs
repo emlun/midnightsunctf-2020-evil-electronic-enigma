@@ -47,13 +47,11 @@ ALU INCR C C => C
 JMP T ? 16
 ";
 
-#[test]
-fn bubble_sort() -> Result<(), String> {
-    let mut program: Vec<Word> = generate_code(&assemble_program(SOURCE)?);
+fn test_reversed_range(source: &str, range_len: Word) -> Result<(), String> {
+    let mut program: Vec<Word> = generate_code(&assemble_program(source)?);
 
-    let start_list = 104;
-    let list_len = 128;
-    let end_list = start_list + list_len - 1;
+    let start_list = (program.len() + 8 - (program.len() % 8)) as u8;
+    let end_list = start_list + range_len - 1;
 
     program[2] = start_list;
     program[3] = end_list;
@@ -61,7 +59,7 @@ fn bubble_sort() -> Result<(), String> {
     while program.len() < start_list.into() {
         program.push(0);
     }
-    for i in (0..list_len).rev() {
+    for i in (0..range_len).rev() {
         program.push(i);
     }
     while program.len() < 256 {
@@ -71,19 +69,17 @@ fn bubble_sort() -> Result<(), String> {
     let computer = LegComputer::new(program).run();
 
     assert_eq!(
-        *(0..list_len).collect::<Vec<u8>>().as_slice(),
+        *(0..range_len).collect::<Vec<u8>>().as_slice(),
         computer.memory[start_list.into()..=end_list.into()]
     );
 
     Ok(())
 }
 
-#[test]
-fn bubble_sort_random() -> Result<(), String> {
-    let mut program: Vec<Word> = generate_code(&assemble_program(SOURCE)?);
+fn test_random_list(source: &str, list_len: Word) -> Result<(), String> {
+    let mut program: Vec<Word> = generate_code(&assemble_program(source)?);
 
-    let start_list = 104;
-    let list_len = 8;
+    let start_list = (program.len() + 8 - (program.len() % 8)) as u8;
     let end_list = start_list + list_len - 1;
 
     program[2] = start_list;
@@ -115,4 +111,14 @@ fn bubble_sort_random() -> Result<(), String> {
     );
 
     Ok(())
+}
+
+#[test]
+fn bubble_sort() -> Result<(), String> {
+    test_reversed_range(SOURCE, 128)
+}
+
+#[test]
+fn bubble_sort_random() -> Result<(), String> {
+    test_random_list(SOURCE, 128)
 }
