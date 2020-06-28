@@ -14,54 +14,54 @@ pub type Value = Word;
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum Opcode {
-    Load = 0x0,
-    LoadP = 0x1,
+    Nop = 0x0,
 
-    Store = 0x2,
-    StoreP = 0x3,
+    Load = 0x1,
+    LoadP = 0x2,
 
-    Mov = 0x4,
-    MovC = 0x5,
+    Store = 0x3,
+    StoreP = 0x4,
 
-    Jmp = 0x6,
-    JmpP = 0x7,
-    JmpR = 0x8,
-    JmpRP = 0x9,
+    Mov = 0x5,
+    MovC = 0x6,
 
-    Stack = 0xA,
+    Jmp = 0x7,
+    JmpP = 0x8,
+    JmpR = 0x9,
+    JmpRP = 0xA,
 
-    Gpio = 0xD,
+    Stack = 0xB,
 
-    Alu = 0xE,
+    Gpio = 0xC,
 
-    Halt = 0xF,
+    Alu = 0xD,
 }
 
 impl TryFrom<Word> for Opcode {
     type Error = String;
     fn try_from(w: Word) -> Result<Self, Self::Error> {
         match w {
-            0x0 => Ok(Self::Load),
-            0x1 => Ok(Self::LoadP),
+            0x0 => Ok(Self::Nop),
 
-            0x2 => Ok(Self::Store),
-            0x3 => Ok(Self::StoreP),
+            0x1 => Ok(Self::Load),
+            0x2 => Ok(Self::LoadP),
 
-            0x4 => Ok(Self::Mov),
-            0x5 => Ok(Self::MovC),
+            0x3 => Ok(Self::Store),
+            0x4 => Ok(Self::StoreP),
 
-            0x6 => Ok(Self::Jmp),
-            0x7 => Ok(Self::JmpP),
-            0x8 => Ok(Self::JmpR),
-            0x9 => Ok(Self::JmpRP),
+            0x5 => Ok(Self::Mov),
+            0x6 => Ok(Self::MovC),
 
-            0xA => Ok(Self::Stack),
+            0x7 => Ok(Self::Jmp),
+            0x8 => Ok(Self::JmpP),
+            0x9 => Ok(Self::JmpR),
+            0xA => Ok(Self::JmpRP),
 
-            0xD => Ok(Self::Gpio),
+            0xB => Ok(Self::Stack),
 
-            0xE => Ok(Self::Alu),
+            0xC => Ok(Self::Gpio),
 
-            0xF => Ok(Self::Halt),
+            0xD => Ok(Self::Alu),
 
             other => Err(format!("Invalid opcode: {}", other)),
         }
@@ -469,7 +469,7 @@ pub enum Instruction {
         out: RegisterRef,
     },
 
-    Halt,
+    Nop(NopOpcode),
 }
 
 #[repr(u8)]
@@ -500,6 +500,24 @@ impl TryFrom<Word> for StackOpcode {
             0b0111 => Ok(Self::LoadD),
 
             other => Err(format!("Invalid stack opcode: {}", other)),
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NopOpcode {
+    Halt = 0x00,
+    Nop = 0xff,
+}
+
+impl TryFrom<Word> for NopOpcode {
+    type Error = String;
+    fn try_from(w: Word) -> Result<Self, Self::Error> {
+        match w {
+            0x00 => Ok(Self::Halt),
+            0xff => Ok(Self::Nop),
+            other => Err(format!("Invalid NOP opcode: {}", other)),
         }
     }
 }
@@ -638,7 +656,7 @@ impl TryFrom<(Word, Word)> for Instruction {
                 out: (word2 & 0x3).try_into()?,
             },
 
-            Opcode::Halt => Self::Halt,
+            Opcode::Nop => Self::Nop(NopOpcode::try_from(word2)?),
         })
     }
 }
@@ -687,7 +705,7 @@ impl Into<(Word, Word)> for &Instruction {
                 ((*arg1 as u8) << 6) | ((*arg2 as u8) << 4) | (*out as u8),
             ),
 
-            Instruction::Halt => cat(Opcode::Halt, 0),
+            Instruction::Nop(nopcode) => cat(Opcode::Nop, *nopcode as u8),
         }
     }
 }
@@ -772,7 +790,8 @@ impl FromStr for Instruction {
                 out: out.parse()?,
             }),
 
-            ["HALT"] => Ok(Self::Halt),
+            ["NOP"] => Ok(Self::Nop(NopOpcode::Nop)),
+            ["HALT"] => Ok(Self::Nop(NopOpcode::Halt)),
 
             other => Err(format!("Invalid instruction: {:?}", other)),
         }
@@ -846,7 +865,7 @@ impl LegComputer {
             self.memory[self.eip as usize + 1],
         ))
         .unwrap();
-        instruction == Instruction::Halt
+        instruction == Instruction::Nop(NopOpcode::Halt)
     }
 
     pub fn run(mut self) -> Self {
@@ -1120,7 +1139,10 @@ impl LegComputer {
                 self.eip += 2;
             }
 
-            Instruction::Halt => {}
+            Instruction::Nop(NopOpcode::Nop) => {
+                self.eip += 2;
+            }
+            Instruction::Nop(NopOpcode::Halt) => {}
         };
     }
 }
