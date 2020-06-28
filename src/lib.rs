@@ -28,11 +28,9 @@ pub enum Opcode {
     JmpR = 0x8,
     JmpRP = 0x9,
 
-    ShiftL = 0xA,
-    ShiftR = 0xB,
+    Stack = 0xA,
 
-    Gpi = 0xC,
-    Gpo = 0xD,
+    Gpio = 0xD,
 
     Alu = 0xE,
 
@@ -57,11 +55,9 @@ impl TryFrom<Word> for Opcode {
             0x8 => Ok(Self::JmpR),
             0x9 => Ok(Self::JmpRP),
 
-            0xA => Ok(Self::ShiftL),
-            0xB => Ok(Self::ShiftR),
+            0xA => Ok(Self::Stack),
 
-            0xC => Ok(Self::Gpi),
-            0xD => Ok(Self::Gpo),
+            0xD => Ok(Self::Gpio),
 
             0xE => Ok(Self::Alu),
 
@@ -80,7 +76,11 @@ pub enum RegisterRef {
     C = 2,
     D = 3,
     /// First 8 flags
-    FL = 14,
+    FL = 12,
+    /// Stack top pointer
+    ST = 13,
+    /// Stack frame base pointer
+    BP = 14,
     /// Instruction pointer
     IP = 15,
 }
@@ -93,7 +93,9 @@ impl TryFrom<Word> for RegisterRef {
             1 => Ok(Self::B),
             2 => Ok(Self::C),
             3 => Ok(Self::D),
-            14 => Ok(Self::FL),
+            12 => Ok(Self::FL),
+            13 => Ok(Self::ST),
+            14 => Ok(Self::BP),
             15 => Ok(Self::IP),
             other => Err(format!("Invalid register: {}", other)),
         }
@@ -109,6 +111,8 @@ impl FromStr for RegisterRef {
             "C" => Ok(Self::C),
             "D" => Ok(Self::D),
             "FL" => Ok(Self::FL),
+            "ST" => Ok(Self::ST),
+            "BP" => Ok(Self::BP),
             "IP" => Ok(Self::IP),
             other => Err(format!("Invalid register: {}", other)),
         }
@@ -129,7 +133,9 @@ pub enum AluOpcode {
     And = 0b1001,
     Nand = 0b1010,
     Nor = 0b1011,
-    Echo = 0b1100,
+    ShiftL = 0b1100,
+    ShiftR = 0b1101,
+    Echo = 0b1111,
 }
 
 impl TryFrom<Word> for AluOpcode {
@@ -147,7 +153,9 @@ impl TryFrom<Word> for AluOpcode {
             0b1001 => Ok(Self::And),
             0b1010 => Ok(Self::Nand),
             0b1011 => Ok(Self::Nor),
-            0b1100 => Ok(Self::Echo),
+            0b1100 => Ok(Self::ShiftL),
+            0b1101 => Ok(Self::ShiftR),
+            0b1111 => Ok(Self::Echo),
             other => Err(format!("Invalid ALU opcode: {}", other)),
         }
     }
@@ -168,6 +176,8 @@ impl FromStr for AluOpcode {
             "AND" => Ok(AluOpcode::And),
             "NAND" => Ok(AluOpcode::Nand),
             "NOR" => Ok(AluOpcode::Nor),
+            "SHIFTL" => Ok(AluOpcode::ShiftL),
+            "SHIFTR" => Ok(AluOpcode::ShiftR),
             "ECHO" => Ok(AluOpcode::Echo),
             other => Err(format!("Invalid ALU operation: {}", other)),
         }
@@ -363,6 +373,8 @@ impl Registers {
         values.insert(RegisterRef::B, 0);
         values.insert(RegisterRef::C, 0);
         values.insert(RegisterRef::D, 0);
+        values.insert(RegisterRef::ST, 0);
+        values.insert(RegisterRef::BP, 0);
         Registers { values }
     }
 
@@ -382,12 +394,14 @@ impl Display for Registers {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(
             f,
-            "[A: {}, B: {}, C: {}, D: {}, FL: {}, IP: {}]",
+            "[A: {}, B: {}, C: {}, D: {}, FL: {}, ST: {}, BP: {}, IP: {}]",
             self.get(&RegisterRef::A),
             self.get(&RegisterRef::B),
             self.get(&RegisterRef::C),
             self.get(&RegisterRef::D),
             self.get(&RegisterRef::FL),
+            self.get(&RegisterRef::ST),
+            self.get(&RegisterRef::BP),
             self.get(&RegisterRef::IP),
         )
     }
@@ -439,16 +453,7 @@ pub enum Instruction {
         diff_src: RegisterRef,
     },
 
-    ShiftL {
-        src: RegisterRef,
-        dest: RegisterRef,
-        amount: Value,
-    },
-    ShiftR {
-        src: RegisterRef,
-        dest: RegisterRef,
-        amount: Value,
-    },
+    Stack(StackInstruction),
 
     Gpi {
         dest: RegisterRef,
@@ -465,6 +470,71 @@ pub enum Instruction {
     },
 
     Halt,
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug)]
+pub enum StackOpcode {
+    Push = 0b0000,
+    Pop = 0b0001,
+    Call = 0b0010,
+    Ret = 0b0011,
+    LoadA = 0b0100,
+    LoadB = 0b0101,
+    LoadC = 0b0110,
+    LoadD = 0b0111,
+}
+
+impl TryFrom<Word> for StackOpcode {
+    type Error = String;
+    fn try_from(w: Word) -> Result<Self, Self::Error> {
+        match w {
+            0b0000 => Ok(Self::Push),
+            0b0001 => Ok(Self::Pop),
+            0b0010 => Ok(Self::Call),
+            0b0011 => Ok(Self::Ret),
+
+            0b0100 => Ok(Self::LoadA),
+            0b0101 => Ok(Self::LoadB),
+            0b0110 => Ok(Self::LoadC),
+            0b0111 => Ok(Self::LoadD),
+
+            other => Err(format!("Invalid stack opcode: {}", other)),
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum StackInstruction {
+    Push { src: RegisterRef },
+    Pop { dest: RegisterRef },
+    Load { dest: RegisterRef, bp_diff: Word },
+    Call { addr_reg: RegisterRef },
+    Ret { src: RegisterRef },
+}
+
+impl Into<(Word, Word)> for &StackInstruction {
+    fn into(self) -> (Word, Word) {
+        fn cat(op: StackOpcode, arg: Word) -> (Word, Word) {
+            (((Opcode::Stack as u8) << 4) | (op as u8), arg)
+        }
+        match self {
+            StackInstruction::Push { src } => cat(StackOpcode::Push, *src as u8),
+            StackInstruction::Pop { dest } => cat(StackOpcode::Pop, *dest as u8),
+            StackInstruction::Call { addr_reg } => cat(StackOpcode::Call, *addr_reg as u8),
+            StackInstruction::Ret { src } => cat(StackOpcode::Ret, *src as u8),
+            StackInstruction::Load { dest, bp_diff } => {
+                let opcode = match dest {
+                    RegisterRef::A => StackOpcode::LoadA,
+                    RegisterRef::B => StackOpcode::LoadB,
+                    RegisterRef::C => StackOpcode::LoadC,
+                    RegisterRef::D => StackOpcode::LoadD,
+                    other => panic!("Cannot load from stack to register: {:?}", other),
+                };
+                cat(opcode, *bp_diff)
+            }
+        }
+    }
 }
 
 impl TryFrom<(Word, Word)> for Instruction {
@@ -517,22 +587,48 @@ impl TryFrom<(Word, Word)> for Instruction {
                 diff_src: (word2 & 0xf).try_into()?,
             },
 
-            Opcode::ShiftL => Self::ShiftL {
-                src: (word1 & 0xf).try_into()?,
-                dest: ((word2 >> 4) & 0xf).try_into()?,
-                amount: word2 & 0xf,
-            },
-            Opcode::ShiftR => Self::ShiftR {
-                src: (word1 & 0xf).try_into()?,
-                dest: ((word2 >> 4) & 0xf).try_into()?,
-                amount: word2 & 0xf,
-            },
+            Opcode::Stack => Self::Stack({
+                let stack_opcode = StackOpcode::try_from(word1 & 0xf)?;
+                match stack_opcode {
+                    StackOpcode::Push => StackInstruction::Push {
+                        src: word2.try_into()?,
+                    },
+                    StackOpcode::Pop => StackInstruction::Pop {
+                        dest: word2.try_into()?,
+                    },
+                    StackOpcode::Call => StackInstruction::Call {
+                        addr_reg: word2.try_into()?,
+                    },
+                    StackOpcode::Ret => StackInstruction::Ret {
+                        src: word2.try_into()?,
+                    },
+                    StackOpcode::LoadA => StackInstruction::Load {
+                        dest: RegisterRef::A,
+                        bp_diff: word2,
+                    },
+                    StackOpcode::LoadB => StackInstruction::Load {
+                        dest: RegisterRef::B,
+                        bp_diff: word2,
+                    },
+                    StackOpcode::LoadC => StackInstruction::Load {
+                        dest: RegisterRef::C,
+                        bp_diff: word2,
+                    },
+                    StackOpcode::LoadD => StackInstruction::Load {
+                        dest: RegisterRef::D,
+                        bp_diff: word2,
+                    },
+                }
+            }),
 
-            Opcode::Gpi => Self::Gpi {
-                dest: (word2 & 0xf).try_into()?,
-            },
-            Opcode::Gpo => Self::Gpo {
-                src: (word2 & 0xf).try_into()?,
+            Opcode::Gpio => match word1 & 0xf {
+                0 => Self::Gpi {
+                    dest: (word2 & 0xf).try_into()?,
+                },
+                1 => Self::Gpo {
+                    src: (word2 & 0xf).try_into()?,
+                },
+                other => Err(format!("Invalid GPIO op: {}", other))?,
             },
 
             Opcode::Alu => Self::Alu {
@@ -576,17 +672,10 @@ impl Into<(Word, Word)> for &Instruction {
             Instruction::JmpR { flag, diff } => packf(Opcode::JmpR, flag, *diff),
             Instruction::JmpRP { flag, diff_src } => packf(Opcode::JmpRP, flag, *diff_src as u8),
 
-            Instruction::ShiftL { src, dest, amount } => (
-                ((Opcode::ShiftL as u8) << 4) | (*src as u8),
-                ((*dest as u8) << 4) | (*amount & 0xf),
-            ),
-            Instruction::ShiftR { src, dest, amount } => (
-                ((Opcode::ShiftL as u8) << 4) | (*src as u8),
-                ((*dest as u8) << 4) | (*amount & 0xf),
-            ),
+            Instruction::Stack(stack_ins) => stack_ins.into(),
 
-            Instruction::Gpi { dest } => cat(Opcode::Gpi, *dest as u8),
-            Instruction::Gpo { src } => cat(Opcode::Gpo, *src as u8),
+            Instruction::Gpi { dest } => ((Opcode::Gpio as u8) << 4 | 0x0, *dest as u8),
+            Instruction::Gpo { src } => ((Opcode::Gpio as u8) << 4 | 0x1, *src as u8),
 
             Instruction::Alu {
                 op,
@@ -658,16 +747,18 @@ impl FromStr for Instruction {
                 diff_src: diff_src.parse()?,
             }),
 
-            ["SHIFTL", amount, "OF", src, "=>", dest] => Ok(Self::ShiftL {
-                amount: parse_word(amount)?,
-                src: src.parse()?,
+            ["PUSH", src] => Ok(Self::Stack(StackInstruction::Push { src: src.parse()? })),
+            ["POP", dest] => Ok(Self::Stack(StackInstruction::Pop {
                 dest: dest.parse()?,
-            }),
-            ["SHIFTR", amount, "OF", src, "=>", dest] => Ok(Self::ShiftR {
-                amount: parse_word(amount)?,
-                src: src.parse()?,
+            })),
+            ["CALL", addr_reg] => Ok(Self::Stack(StackInstruction::Call {
+                addr_reg: addr_reg.parse()?,
+            })),
+            ["RET", src] => Ok(Self::Stack(StackInstruction::Ret { src: src.parse()? })),
+            ["SLOAD", bp_diff, "=>", dest] => Ok(Self::Stack(StackInstruction::Load {
                 dest: dest.parse()?,
-            }),
+                bp_diff: parse_word(bp_diff)?,
+            })),
 
             ["GPI", dest, "<="] => Ok(Self::Gpi {
                 dest: dest.parse()?,
@@ -773,6 +864,19 @@ impl LegComputer {
         }
     }
 
+    fn stack_push(&mut self, value: Word) -> () {
+        let new_st = ((self.read_register(&RegisterRef::ST) as u16 + 255) & 0xff) as u8;
+        *self.registers.get_mut(RegisterRef::ST) = new_st;
+        self.memory[new_st as usize] = value;
+    }
+
+    fn stack_pop(&mut self) -> Word {
+        let current_st = self.read_register(&RegisterRef::ST);
+        let result = self.memory[current_st as usize];
+        *self.registers.get_mut(RegisterRef::ST) = ((current_st as u16 + 1) & 0xff) as u8;
+        result
+    }
+
     pub fn step(&mut self) -> () {
         let instruction = Instruction::try_from((
             self.memory[self.eip as usize],
@@ -840,14 +944,40 @@ impl LegComputer {
                 }
             }
 
-            Instruction::ShiftL { src, dest, amount } => {
-                *self.registers.get_mut(dest) = self.read_register(&src) << amount;
-                self.eip += 2;
-            }
-            Instruction::ShiftR { src, dest, amount } => {
-                *self.registers.get_mut(dest) = self.read_register(&src) >> amount;
-                self.eip += 2;
-            }
+            Instruction::Stack(stack_ins) => match stack_ins {
+                StackInstruction::Push { src } => {
+                    self.stack_push(self.read_register(&src));
+                    self.eip += 2;
+                }
+                StackInstruction::Pop { dest } => {
+                    let value = self.stack_pop();
+                    *self.registers.get_mut(dest) = value;
+                    self.eip += 2;
+                }
+                StackInstruction::Call { addr_reg } => {
+                    self.stack_push(self.eip);
+                    self.stack_push(self.read_register(&RegisterRef::BP));
+                    let current_st = self.read_register(&RegisterRef::ST);
+                    *self.registers.get_mut(RegisterRef::BP) = current_st;
+                    self.eip = self.read_register(&addr_reg);
+                }
+                StackInstruction::Ret { src } => {
+                    let current_bp = self.read_register(&RegisterRef::BP);
+                    *self.registers.get_mut(RegisterRef::ST) = current_bp;
+
+                    let stored_bp = self.stack_pop();
+                    let stored_ip = self.stack_pop();
+                    *self.registers.get_mut(RegisterRef::BP) = stored_bp;
+                    self.stack_push(self.read_register(&src));
+                    self.eip = stored_ip + 2;
+                }
+                StackInstruction::Load { dest, bp_diff } => {
+                    let current_bp = self.read_register(&RegisterRef::BP);
+                    let load_addr = ((current_bp as i16 + bp_diff as i16 + 256) % 256) as u8;
+                    *self.registers.get_mut(dest) = self.memory[load_addr as usize];
+                    self.eip += 2;
+                }
+            },
 
             Instruction::Gpi { dest } => {
                 *self.registers.get_mut(dest) = self.reg_i;
@@ -962,6 +1092,14 @@ impl LegComputer {
                             !(self.registers.get(&arg1) | self.registers.get(&arg2));
                     }
 
+                    AluOpcode::ShiftL => {
+                        *self.registers.get_mut(out) =
+                            self.registers.get(&arg1) << self.registers.get(&arg2);
+                    }
+                    AluOpcode::ShiftR => {
+                        *self.registers.get_mut(out) =
+                            self.registers.get(&arg1) >> self.registers.get(&arg2);
+                    }
                     AluOpcode::Echo => {
                         *self.registers.get_mut(out) = self.registers.get(&arg1);
                     }
