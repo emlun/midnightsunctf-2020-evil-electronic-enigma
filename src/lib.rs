@@ -1167,6 +1167,7 @@ pub fn assemble_program(source: &str) -> Result<Vec<Instruction>, String> {
         .lines()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
+        .filter(|s| !s.starts_with("#"))
         .map(|s| s.parse())
         .collect()
 }
