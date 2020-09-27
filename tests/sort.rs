@@ -41,9 +41,6 @@ LOADP B => B
 STOREP B => C
 ALU INCR C C => C
 STOREP A => C
-JMPR T ? 4
-
-ALU INCR C C => C
 JMP T ? 16
 ";
 
