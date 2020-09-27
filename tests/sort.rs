@@ -49,7 +49,7 @@ JMP T ? 16
 
 // Memory address 2, 3 contain start (inclusive), end (inclusive) of list
 // List is sorted in place
-const QUICKSORT: &str = "
+const QUICKSORT_PROG: &str = "
 JMP T ? 4
 HALT
 
@@ -60,7 +60,11 @@ PUSH D
 
 CALLC 16
 HALT
+";
 
+// Stack offset 3, 2 contain start (inclusive), end (inclusive) of list
+// List is sorted in place
+const QUICKSORT_FN: &str = "
 # Subroutine: Carry the pivot forward
 
 # If start is past end, return
@@ -115,7 +119,7 @@ STOREP B => D
 STOREP A => C
 
 # Loop: LOOP1
-JMP T ? 28
+JMPR T ? -52
 ";
 
 fn test_reversed_range(source: &str, range_len: Word) -> Result<(), String> {
@@ -182,10 +186,10 @@ fn bubble_sort_random() -> Result<(), String> {
 
 #[test]
 fn quicksort() -> Result<(), String> {
-    test_reversed_range(QUICKSORT, 27)
+    test_reversed_range(&format!("{}\n{}", QUICKSORT_PROG, QUICKSORT_FN), 27)
 }
 
 #[test]
 fn quicksort_random() -> Result<(), String> {
-    test_random_list(QUICKSORT, 27)
+    test_random_list(&format!("{}\n{}", QUICKSORT_PROG, QUICKSORT_FN), 27)
 }
