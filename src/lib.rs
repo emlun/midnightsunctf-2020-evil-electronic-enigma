@@ -864,6 +864,40 @@ impl Display for LegComputer {
     }
 }
 
+fn to_bytes(a: u8) -> [bool; 8] {
+    let mut o = [false; 8];
+    for i in 0..8 {
+        o[i] = ((a >> i) & 0x01) == 0x01;
+    }
+    o
+}
+
+fn from_bytes(a: [bool; 8]) -> u8 {
+    let mut o = 0;
+    for i in 0..8 {
+        if a[i] {
+            o |= 1 << i;
+        }
+    }
+    o
+}
+
+fn full_add(a: bool, b: bool, c: bool) -> (bool, bool) {
+    (a ^ b ^ c, (b && c) || (a && (b || c)))
+}
+
+fn add_8bit(a: [bool; 8], b: [bool; 8], mut carry: bool) -> ([bool; 8], bool, bool) {
+    let mut o = [false; 8];
+    let mut prev_carry = carry;
+    for i in 0..8 {
+        let (s, c) = full_add(a[i], b[i], carry);
+        o[i] = s;
+        prev_carry = carry;
+        carry = c;
+    }
+    (o, carry, prev_carry ^ carry)
+}
+
 impl LegComputer {
     pub fn new(program: Vec<Word>) -> LegComputer {
         LegComputer {
@@ -1033,128 +1067,207 @@ impl LegComputer {
 
             Instruction::Alu {
                 op,
-                arg1,
-                arg2,
+                arg1: arg1_addr,
+                arg2: arg2_addr,
                 out,
             } => {
-                let arg1_unsigned: u16 = self.registers.get(&arg1) as u16;
-                let arg2_unsigned: u16 = self.registers.get(&arg2) as u16;
-                let arg1_signed: i16 = if arg1_unsigned > 0x7f {
-                    (arg1_unsigned as i16) - 256
-                } else {
-                    arg1_unsigned as i16
-                };
-                let arg2_signed: i16 = if arg2_unsigned > 0x7f {
-                    (arg2_unsigned as i16) - 256
-                } else {
-                    arg2_unsigned as i16
-                };
+                let arg1: [bool; 8] = to_bytes(self.registers.get(&arg1_addr));
+                let arg2: [bool; 8] = to_bytes(self.registers.get(&arg2_addr));
 
                 match op {
                     AluOpcode::Add => {
-                        let result_unsigned: u16 = arg1_unsigned + arg2_unsigned;
-                        let result_signed: i16 = arg1_signed + arg2_signed;
+                        let (o, ofl_u, ofl_s) = add_8bit(arg1, arg2, false);
 
-                        *self.registers.get_mut(out) = (result_unsigned & 0xff) as u8;
-                        if result_unsigned > 0xff {
-                            self.flags.overflow_unsigned = true;
-                        }
-                        if result_signed < -128 || result_signed > 127 {
-                            self.flags.overflow_signed = true;
-                        }
+                        *self.registers.get_mut(out) = from_bytes(o) as u8;
+                        self.flags.overflow_unsigned = ofl_u;
+                        self.flags.overflow_signed = ofl_s;
                     }
 
                     AluOpcode::AddCarry => {
-                        let result_unsigned: u16 = arg1_unsigned + arg2_unsigned + 1;
-                        let result_signed: i16 = arg1_signed + arg2_signed + 1;
+                        let (o, ofl_u, ofl_s) = add_8bit(arg1, arg2, true);
 
-                        *self.registers.get_mut(out) = (result_unsigned & 0xff) as u8;
-                        if result_unsigned > 0xff {
-                            self.flags.overflow_unsigned = true;
-                        }
-                        if result_signed < -128 || result_signed > 127 {
-                            self.flags.overflow_signed = true;
-                        }
+                        *self.registers.get_mut(out) = from_bytes(o) as u8;
+                        self.flags.overflow_unsigned = ofl_u;
+                        self.flags.overflow_signed = ofl_s;
                     }
 
                     AluOpcode::Incr => {
-                        let arg1: u16 = self.registers.get(&arg1) as u16;
-                        let result: u16 = (arg1 + 1) & 0xff;
+                        let (o, ofl_u, ofl_s) = add_8bit(
+                            arg1,
+                            [true, false, false, false, false, false, false, false],
+                            false,
+                        );
 
-                        *self.registers.get_mut(out) = result as u8;
-                        self.flags.overflow_unsigned = result == 0x00;
-                        self.flags.overflow_signed = result == 0x80;
+                        *self.registers.get_mut(out) = from_bytes(o) as u8;
+                        self.flags.overflow_unsigned = ofl_u;
+                        self.flags.overflow_signed = ofl_s;
                     }
 
                     AluOpcode::Decr => {
-                        let arg1: u16 = self.registers.get(&arg1) as u16;
-                        let result: u16 = (arg1 + 256 - 1) & 0xff;
+                        let (o, ofl_u, ofl_s) = add_8bit(
+                            arg1,
+                            [true, true, true, true, true, true, true, true],
+                            false,
+                        );
 
-                        *self.registers.get_mut(out) = result as u8;
-                        self.flags.overflow_unsigned = result == 0xff;
-                        self.flags.overflow_signed = result == 0x7f;
+                        *self.registers.get_mut(out) = from_bytes(o) as u8;
+                        self.flags.overflow_unsigned = ofl_u;
+                        self.flags.overflow_signed = ofl_s;
                     }
 
                     AluOpcode::Xor => {
-                        *self.registers.get_mut(out) =
-                            self.registers.get(&arg1) ^ self.registers.get(&arg2);
+                        let mut o = [false; 8];
+                        for i in 0..8 {
+                            o[i] = arg1[i] ^ arg2[i];
+                        }
+                        *self.registers.get_mut(out) = from_bytes(o);
                     }
 
                     AluOpcode::Neg => {
-                        *self.registers.get_mut(out) =
-                            (((self.registers.get(&arg1) ^ 0xff) as u16 + 1) & 0xff) as u8;
+                        let mut o = [false; 8];
+                        for i in 0..8 {
+                            o[i] = !arg2[i];
+                        }
+                        *self.registers.get_mut(out) = from_bytes(o) as u8;
                     }
 
                     AluOpcode::Sub => {
-                        let result_unsigned: u16 = arg1_unsigned - arg2_unsigned;
-                        let result_signed: i16 = arg1_signed - arg2_signed;
+                        let mut not2 = [false; 8];
+                        for i in 0..8 {
+                            not2[i] = !arg2[i];
+                        }
+                        let (o, ofl_u, ofl_s) = add_8bit(arg1, not2, true);
 
-                        *self.registers.get_mut(out) = (result_unsigned & 0xff) as u8;
-                        if result_unsigned > 0xff {
-                            self.flags.overflow_unsigned = true;
-                        }
-                        if result_signed < -128 || result_signed > 127 {
-                            self.flags.overflow_signed = true;
-                        }
+                        *self.registers.get_mut(out) = from_bytes(o) as u8;
+                        self.flags.overflow_unsigned = ofl_u;
+                        self.flags.overflow_signed = ofl_s;
                     }
 
                     AluOpcode::Or => {
-                        *self.registers.get_mut(out) =
-                            self.registers.get(&arg1) | self.registers.get(&arg2);
+                        let mut o = [false; 8];
+                        for i in 0..8 {
+                            o[i] = arg1[i] || arg2[i];
+                        }
+                        *self.registers.get_mut(out) = from_bytes(o);
                     }
                     AluOpcode::And => {
-                        *self.registers.get_mut(out) =
-                            self.registers.get(&arg1) & self.registers.get(&arg2);
+                        let mut o = [false; 8];
+                        for i in 0..8 {
+                            o[i] = arg1[i] && arg2[i];
+                        }
+                        *self.registers.get_mut(out) = from_bytes(o);
                     }
                     AluOpcode::Nand => {
-                        *self.registers.get_mut(out) =
-                            !(self.registers.get(&arg1) & self.registers.get(&arg2));
+                        let mut o = [false; 8];
+                        for i in 0..8 {
+                            o[i] = !(arg1[i] && arg2[i]);
+                        }
+                        *self.registers.get_mut(out) = from_bytes(o);
                     }
                     AluOpcode::Nor => {
-                        *self.registers.get_mut(out) =
-                            !(self.registers.get(&arg1) | self.registers.get(&arg2));
+                        let mut o = [false; 8];
+                        for i in 0..8 {
+                            o[i] = !(arg1[i] || arg2[i]);
+                        }
+                        *self.registers.get_mut(out) = from_bytes(o);
                     }
 
                     AluOpcode::ShiftL => {
-                        *self.registers.get_mut(out) =
-                            self.registers.get(&arg1) << self.registers.get(&arg2);
+                        let o = match arg2 {
+                            [false, false, false, ..] => arg1,
+                            [true, false, false, ..] => [
+                                false, arg1[0], arg1[1], arg1[2], arg1[3], arg1[4], arg1[5],
+                                arg1[6],
+                            ],
+                            [false, true, false, ..] => [
+                                false, false, arg1[0], arg1[1], arg1[2], arg1[3], arg1[4], arg1[5],
+                            ],
+                            [true, true, false, ..] => [
+                                false, false, false, arg1[0], arg1[1], arg1[2], arg1[3], arg1[4],
+                            ],
+                            [false, false, true, ..] => [
+                                false, false, false, false, arg1[0], arg1[1], arg1[2], arg1[3],
+                            ],
+                            [true, false, true, ..] => {
+                                [false, false, false, false, false, arg1[0], arg1[1], arg1[2]]
+                            }
+                            [false, true, true, ..] => {
+                                [false, false, false, false, false, false, arg1[0], arg1[1]]
+                            }
+                            [true, true, true, ..] => {
+                                [false, false, false, false, false, false, false, arg1[0]]
+                            }
+                        };
+                        *self.registers.get_mut(out) = from_bytes(o);
                     }
+
                     AluOpcode::ShiftR => {
-                        *self.registers.get_mut(out) =
-                            self.registers.get(&arg1) >> self.registers.get(&arg2);
+                        let o = match arg2 {
+                            [false, false, false, ..] => arg1,
+                            [true, false, false, ..] => [
+                                arg1[1], arg1[2], arg1[3], arg1[4], arg1[5], arg1[6], arg1[7],
+                                arg1[7],
+                            ],
+                            [false, true, false, ..] => [
+                                arg1[2], arg1[3], arg1[4], arg1[5], arg1[6], arg1[7], arg1[7],
+                                arg1[7],
+                            ],
+                            [true, true, false, ..] => [
+                                arg1[3], arg1[4], arg1[5], arg1[6], arg1[7], arg1[7], arg1[7],
+                                arg1[7],
+                            ],
+                            [false, false, true, ..] => [
+                                arg1[4], arg1[5], arg1[6], arg1[7], arg1[7], arg1[7], arg1[7],
+                                arg1[7],
+                            ],
+                            [true, false, true, ..] => [
+                                arg1[5], arg1[6], arg1[7], arg1[7], arg1[7], arg1[7], arg1[7],
+                                arg1[7],
+                            ],
+                            [false, true, true, ..] => [
+                                arg1[6], arg1[7], arg1[7], arg1[7], arg1[7], arg1[7], arg1[7],
+                                arg1[7],
+                            ],
+                            [true, true, true, ..] => [
+                                arg1[7], arg1[7], arg1[7], arg1[7], arg1[7], arg1[7], arg1[7],
+                                arg1[7],
+                            ],
+                        };
+                        *self.registers.get_mut(out) = from_bytes(o);
                     }
+
                     AluOpcode::Echo => {
-                        *self.registers.get_mut(out) = self.registers.get(&arg1);
+                        *self.registers.get_mut(out) = self.registers.get(&arg1_addr);
                     }
                 };
 
                 self.flags.eq_zero = self.registers.get(&out) == 0;
-                self.flags.equal = self.registers.get(&arg1) == self.registers.get(&arg2);
+
+                self.flags.equal = arg1[0] == arg2[0];
+                for i in 1..8 {
+                    self.flags.equal = self.flags.equal && (arg1[i] == arg2[i]);
+                }
                 self.flags.not_equal = !self.flags.equal;
-                self.flags.greater_than = arg1_unsigned > arg2_unsigned;
-                self.flags.greater_than_signed = arg1_signed > arg2_signed;
-                self.flags.greater_or_equal = arg1_unsigned >= arg2_unsigned;
-                self.flags.greater_or_equal_signed = arg1_signed >= arg2_signed;
+
+                self.flags.greater_than = false;
+                let mut not_greater_than = false;
+                for i in 0..8 {
+                    self.flags.greater_than = self.flags.greater_than
+                        || (arg1[7 - i] && !arg2[7 - i] && !not_greater_than);
+                    not_greater_than = not_greater_than || (!arg1[7 - i] && arg2[7 - i]);
+                }
+
+                self.flags.greater_than_signed = !arg1[7] && arg2[7];
+                let mut not_greater_than = arg1[7] && !arg2[7];
+                for i in 1..8 {
+                    self.flags.greater_than_signed = self.flags.greater_than_signed
+                        || (arg1[7 - i] && !arg2[7 - i] && !not_greater_than);
+                    not_greater_than = not_greater_than || (!arg1[7 - i] && arg2[7 - i]);
+                }
+
+                self.flags.greater_or_equal = self.flags.greater_than || self.flags.equal;
+                self.flags.greater_or_equal_signed =
+                    self.flags.greater_than_signed || self.flags.equal;
                 self.flags.less_than = !self.flags.greater_or_equal;
                 self.flags.less_than_signed = !self.flags.greater_or_equal_signed;
                 self.flags.less_or_equal = !self.flags.greater_than;
