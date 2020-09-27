@@ -1,22 +1,22 @@
 use leg_simulator::assemble_program;
 use leg_simulator::generate_code;
 use leg_simulator::LegComputer;
+use leg_simulator::RegisterRef;
 use leg_simulator::Word;
 
-// Memory address 2, 3 contain start (inclusive), end (exclusive) of list
+// Memory address 0, 1 contain start (inclusive), end (exclusive) of list
+// Memory address 2 contains start (inclusive) of correct result
 // List is copied to range immediately following it,
 // then the copy is sorted in place,
-// then XORs the two lists.
+// then the XOR of the two lists is compared against the correct result.
+// Writes "OK" to address 0..=1 if equal, or "ERR" to address 0..=2 otherwise.
 const CHALLENGE_PROG: &str = "
-JMP T ? 4
-HALT
-
 LOAD 0 => C
 LOAD 1 => D
 PUSH C
 PUSH D
 PUSH D
-CALLR 48
+CALLR 68
 POP C
 POP D
 POP D
@@ -27,7 +27,7 @@ ALU ADD C D => D
 ALU DECR D D => D
 PUSH C
 PUSH D
-CALLR 90
+CALLR 124
 POP A
 POP D
 ALU INCR D D => D
@@ -35,12 +35,24 @@ PUSH D
 
 LOAD 0 => B
 PUSH B
-MOVC 8 => B
-STORE B => 2
+LOAD 2 => B
 PUSH B
-CALLR 32
+CALLR 54
 POP A
-STORE A => 3
+
+ALU ECHO A A => A
+JMPR Z ? 14
+MOVC 69 => A
+STORE A => 0
+MOVC 82 => A
+STORE A => 1
+STORE A => 2
+HALT
+
+MOVC 79 => A
+STORE A => 0
+MOVC 75 => A
+STORE A => 1
 HALT
 ";
 
@@ -64,35 +76,46 @@ ALU INCR C C => C
 JMPR T ? -16
 ";
 
+// Check the xor of two lists against a predefined correct result.
 // Stack offset 5, 4 contain start (inclusive), end (exclusive) of list 1
 // Stack offset 3 contains start (inclusive) of list 2
-// offset 2 contains start (inclusive) of xor destination
-// returns end (exclusive) of xor destination
-const XOR_LIST_FN: &str = "
-# Function: xor list
+// offset 2 contains start (inclusive) of the correct xor template
+// Returns zero if xor result was equal to correct xor template
+const XOR_LIST_CHECK_FN: &str = "
+# Function: xor list check
 SLOAD 5 => C
 SLOAD 3 => B
 SLOAD 2 => D
+PUSH D
+MOVC 0 => D
 PUSH D
 
 SLOAD 4 => D
 
 ALU ECHO C D => C
 JMPR LT ? 6
-POP D
-RET D
+POP A
+RET A
 
 LOADP B => A
 LOADP C => D
 ALU XOR A D => A
+
+SLOAD -1 => D
+LOADP D => D
+ALU XOR A D => A
+
 POP D
-STOREP A => D
+ALU OR A D => A
+
 ALU INCR B B => B
 ALU INCR C C => C
+POP D
 ALU INCR D D => D
 PUSH D
+PUSH A
 
-JMPR T ? -28
+JMPR T ? -38
 ";
 
 // Stack offset 3, 2 contain start (inclusive), end (inclusive) of list
@@ -161,12 +184,27 @@ JMPR T ? -62
 ";
 
 #[test]
-fn test_ctf() -> Result<(), String> {
+fn xor_fn() -> Result<(), String> {
     let source = &format!(
-        "{}\n{}\n{}\n{}",
-        CHALLENGE_PROG, COPY_LIST_FN, XOR_LIST_FN, QUICKSORT_FN
+        "
+MOVC 32 => A
+PUSH A
+MOVC 64 => A
+PUSH A
+
+PUSH A
+
+MOVC 0 => A
+PUSH A
+
+CALLR 4
+HALT
+
+{}",
+        XOR_LIST_CHECK_FN,
     );
     let program: Vec<Word> = generate_code(&assemble_program(source)?);
+    assert!(program.len() <= 256);
     let mut memory: Vec<Word> = Vec::with_capacity(256);
 
     let input = b"midnight{f1ddlin_wi_m4_bi75}";
@@ -181,13 +219,76 @@ fn test_ctf() -> Result<(), String> {
         .map(|(a, b)| a ^ b)
         .collect();
 
-    let start_list = (input.len() + 8 + (8 - input.len() % 8)) as u8;
+    let start_list = 32 as u8;
     let end_list = start_list + input.len() as u8;
 
+    memory.append(&mut solution_xor.clone());
     memory.resize(start_list.into(), 0);
+    memory.append(&mut input.to_vec());
+    memory.resize(64, 0);
+    memory.append(&mut sorted_input.clone());
+    memory.resize(256, 0);
+
+    let computer = LegComputer::new(program, memory).run();
+    println!("{}", computer);
+
+    assert_eq!(
+        0,
+        computer.memory[computer.registers.get(&RegisterRef::ST) as usize]
+    );
+    assert_eq!(
+        input[..],
+        computer.memory[start_list.into()..end_list.into()]
+    );
+    assert_eq!(
+        sorted_input[..],
+        computer.memory
+            [(usize::from(start_list) + 32)..(usize::from(start_list) + 32 + input.len())]
+    );
+    assert_eq!(solution_xor[..], computer.memory[0..solution_xor.len()]);
+
+    Ok(())
+}
+
+fn run_ctf(input: &[u8]) -> Result<LegComputer, String> {
+    let source = &format!(
+        "{}\n{}\n{}\n{}",
+        CHALLENGE_PROG, COPY_LIST_FN, XOR_LIST_CHECK_FN, QUICKSORT_FN
+    );
+    let program: Vec<Word> = generate_code(&assemble_program(source)?);
+    assert!(program.len() <= 256);
+    let mut memory: Vec<Word> = Vec::with_capacity(256);
+
+    let sorted_input = {
+        let mut v = input.to_vec();
+        v.sort();
+        v
+    };
+
+    let correct_input = b"midnight{f1ddlin_wi_m4_bi75}";
+    let sorted_correct_input = {
+        let mut v = correct_input.to_vec();
+        v.sort();
+        v
+    };
+    let solution_xor: Vec<u8> = correct_input
+        .iter()
+        .zip(sorted_correct_input.iter())
+        .map(|(a, b)| a ^ b)
+        .collect();
+
+    let start_solution = 8 as u8;
+    let start_list = start_solution + solution_xor.len() as u8;
+    let end_list = start_list + input.len() as u8;
+
+    memory.resize(start_solution as usize, 0);
     memory[0] = start_list;
     memory[1] = end_list;
+    memory[2] = start_solution;
 
+    memory.append(&mut solution_xor.clone());
+
+    memory.resize(start_list.into(), 0);
     memory.append(&mut input.to_vec());
     memory.resize(256, 0);
 
@@ -207,6 +308,24 @@ fn test_ctf() -> Result<(), String> {
         solution_xor[..],
         computer.memory[8..(8 + solution_xor.len())]
     );
+
+    Ok(computer)
+}
+
+#[test]
+fn test_ctf_correct() -> Result<(), String> {
+    let input = b"midnight{f1ddlin_wi_m4_bi75}";
+    let computer = run_ctf(input)?;
+    assert_eq!(b"OK"[..], computer.memory[0..2]);
+
+    Ok(())
+}
+
+#[test]
+fn test_ctf_incorrect() -> Result<(), String> {
+    let input = b"midnight{fiddlin_wi_ma_bits}";
+    let computer = run_ctf(input)?;
+    assert_eq!(b"ERR"[..], computer.memory[0..3]);
 
     Ok(())
 }
