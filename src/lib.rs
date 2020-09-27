@@ -473,11 +473,12 @@ pub enum Instruction {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum StackOpcode {
-    Push = 0b0000,
-    Pop = 0b0001,
-    Call = 0b0010,
-    CallC = 0b0011,
-    Ret = 0b0100,
+    Ret = 0b0000,
+    Push = 0b0001,
+    Pop = 0b0010,
+    Call = 0b0100,
+    CallC = 0b0101,
+    CallR = 0b0110,
     LoadA = 0b1000,
     LoadB = 0b1001,
     LoadC = 0b1010,
@@ -488,11 +489,13 @@ impl TryFrom<Word> for StackOpcode {
     type Error = String;
     fn try_from(w: Word) -> Result<Self, Self::Error> {
         match w {
-            0b0000 => Ok(Self::Push),
-            0b0001 => Ok(Self::Pop),
-            0b0010 => Ok(Self::Call),
-            0b0011 => Ok(Self::CallC),
-            0b0100 => Ok(Self::Ret),
+            0b0000 => Ok(Self::Ret),
+            0b0001 => Ok(Self::Push),
+            0b0010 => Ok(Self::Pop),
+
+            0b0100 => Ok(Self::Call),
+            0b0101 => Ok(Self::CallC),
+            0b0110 => Ok(Self::CallR),
 
             0b1000 => Ok(Self::LoadA),
             0b1001 => Ok(Self::LoadB),
@@ -529,6 +532,7 @@ pub enum StackInstruction {
     Load { dest: RegisterRef, bp_diff: Word },
     Call { addr_reg: RegisterRef },
     CallC { addr: Word },
+    CallR { diff: Word },
     Ret { src: RegisterRef },
 }
 
@@ -542,6 +546,7 @@ impl Into<(Word, Word)> for &StackInstruction {
             StackInstruction::Pop { dest } => cat(StackOpcode::Pop, *dest as u8),
             StackInstruction::Call { addr_reg } => cat(StackOpcode::Call, *addr_reg as u8),
             StackInstruction::CallC { addr } => cat(StackOpcode::CallC, *addr),
+            StackInstruction::CallR { diff } => cat(StackOpcode::CallR, *diff),
             StackInstruction::Ret { src } => cat(StackOpcode::Ret, *src as u8),
             StackInstruction::Load { dest, bp_diff } => {
                 let opcode = match dest {
@@ -610,6 +615,9 @@ impl TryFrom<(Word, Word)> for Instruction {
             Opcode::Stack => Self::Stack({
                 let stack_opcode = StackOpcode::try_from(word1 & 0xf)?;
                 match stack_opcode {
+                    StackOpcode::Ret => StackInstruction::Ret {
+                        src: word2.try_into()?,
+                    },
                     StackOpcode::Push => StackInstruction::Push {
                         src: word2.try_into()?,
                     },
@@ -620,9 +628,7 @@ impl TryFrom<(Word, Word)> for Instruction {
                         addr_reg: word2.try_into()?,
                     },
                     StackOpcode::CallC => StackInstruction::CallC { addr: word2 },
-                    StackOpcode::Ret => StackInstruction::Ret {
-                        src: word2.try_into()?,
-                    },
+                    StackOpcode::CallR => StackInstruction::CallR { diff: word2 },
                     StackOpcode::LoadA => StackInstruction::Load {
                         dest: RegisterRef::A,
                         bp_diff: word2,
@@ -777,6 +783,9 @@ impl FromStr for Instruction {
             })),
             ["CALLC", addr] => Ok(Self::Stack(StackInstruction::CallC {
                 addr: parse_word(addr)?,
+            })),
+            ["CALLR", diff] => Ok(Self::Stack(StackInstruction::CallR {
+                diff: parse_word(diff)?,
             })),
             ["RET", src] => Ok(Self::Stack(StackInstruction::Ret { src: src.parse()? })),
             ["SLOAD", bp_diff, "=>", dest] => Ok(Self::Stack(StackInstruction::Load {
@@ -1023,6 +1032,16 @@ impl LegComputer {
             }
 
             Instruction::Stack(stack_ins) => match stack_ins {
+                StackInstruction::Ret { src } => {
+                    let current_bp = self.read_register(&RegisterRef::BP);
+                    *self.registers.get_mut(RegisterRef::ST) = current_bp;
+
+                    let stored_bp = self.stack_pop();
+                    let stored_ip = self.stack_pop();
+                    *self.registers.get_mut(RegisterRef::BP) = stored_bp;
+                    self.stack_push(self.read_register(&src));
+                    self.eip = stored_ip + 2;
+                }
                 StackInstruction::Push { src } => {
                     self.stack_push(self.read_register(&src));
                     self.eip += 2;
@@ -1038,15 +1057,8 @@ impl LegComputer {
                 StackInstruction::CallC { addr } => {
                     self.call(addr);
                 }
-                StackInstruction::Ret { src } => {
-                    let current_bp = self.read_register(&RegisterRef::BP);
-                    *self.registers.get_mut(RegisterRef::ST) = current_bp;
-
-                    let stored_bp = self.stack_pop();
-                    let stored_ip = self.stack_pop();
-                    *self.registers.get_mut(RegisterRef::BP) = stored_bp;
-                    self.stack_push(self.read_register(&src));
-                    self.eip = stored_ip + 2;
+                StackInstruction::CallR { diff } => {
+                    self.call((self.eip as i16 + diff as i16) as u8);
                 }
                 StackInstruction::Load { dest, bp_diff } => {
                     let current_bp = self.read_register(&RegisterRef::BP);
