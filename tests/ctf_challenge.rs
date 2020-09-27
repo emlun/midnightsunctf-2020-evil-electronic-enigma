@@ -138,7 +138,8 @@ JMPR T ? -62
 #[test]
 fn test_ctf() -> Result<(), String> {
     let source = &format!("{}\n{}\n{}", CHALLENGE_PROG, COPY_LIST_FN, QUICKSORT_FN);
-    let mut program: Vec<Word> = generate_code(&assemble_program(source)?);
+    let program: Vec<Word> = generate_code(&assemble_program(source)?);
+    let mut memory: Vec<Word> = Vec::with_capacity(256);
 
     let input = b"midnight{f1ddlin_m4_bit5}";
     let sorted_input = {
@@ -146,17 +147,17 @@ fn test_ctf() -> Result<(), String> {
         v.sort();
         v
     };
-    let start_list = program.len() as u8;
+    let start_list = 8;
     let end_list = start_list + input.len() as u8;
 
-    program[2] = start_list;
-    program[3] = end_list;
+    memory.resize(start_list.into(), 0);
+    memory[2] = start_list;
+    memory[3] = end_list;
 
-    program.resize(start_list.into(), 0);
-    program.append(&mut input.to_vec());
-    program.resize(256, 0);
+    memory.append(&mut input.to_vec());
+    memory.resize(256, 0);
 
-    let computer = LegComputer::new(program).run();
+    let computer = LegComputer::new(program, memory).run();
     println!("{}", computer);
 
     assert_eq!(

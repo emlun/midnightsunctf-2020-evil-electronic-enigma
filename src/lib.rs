@@ -816,6 +816,7 @@ impl FromStr for Instruction {
 #[derive(Clone, Debug)]
 pub struct LegComputer {
     pub eip: Word,
+    pub program: Memory,
     pub memory: Memory,
     pub flags: AluFlags,
     pub registers: Registers,
@@ -836,8 +837,8 @@ impl Display for LegComputer {
         )?;
 
         let instruction = Instruction::try_from((
-            self.memory[self.eip as usize],
-            self.memory[self.eip as usize + 1],
+            self.program[self.eip as usize],
+            self.program[self.eip as usize + 1],
         ))
         .unwrap();
 
@@ -847,22 +848,16 @@ impl Display for LegComputer {
             if i % 8 == 0 {
                 write!(f, "\n{:>3}: ", i)?;
             }
-            if i == self.eip.into() {
-                write!(f, "{{ {:>4}", v)?;
-            } else if i == (usize::from(self.eip) + 1) {
-                write!(f, "{:>4} }}", v)?;
+            let is_sp = i == usize::from(self.read_register(&RegisterRef::ST));
+            let is_bp = i == usize::from(self.read_register(&RegisterRef::BP));
+            if is_sp && is_bp {
+                write!(f, "[ {:>2} ]", v)?;
+            } else if is_sp {
+                write!(f, "[ {:>4}", v)?;
+            } else if is_bp {
+                write!(f, "{:>4} ]", v)?;
             } else {
-                let is_sp = i == usize::from(self.read_register(&RegisterRef::ST));
-                let is_bp = i == usize::from(self.read_register(&RegisterRef::BP));
-                if is_sp && is_bp {
-                    write!(f, "[ {:>2} ]", v)?;
-                } else if is_sp {
-                    write!(f, "[ {:>4}", v)?;
-                } else if is_bp {
-                    write!(f, "{:>4} ]", v)?;
-                } else {
-                    write!(f, "{:>6}", v)?;
-                }
+                write!(f, "{:>6}", v)?;
             }
             if i < (self.memory.len() - 1) {
                 write!(f, "  ")?;
@@ -908,10 +903,11 @@ fn add_8bit(a: [bool; 8], b: [bool; 8], mut carry: bool) -> ([bool; 8], bool, bo
 }
 
 impl LegComputer {
-    pub fn new(program: Vec<Word>) -> LegComputer {
+    pub fn new(program: Vec<Word>, memory: Vec<Word>) -> LegComputer {
         LegComputer {
             eip: 0,
-            memory: program,
+            program,
+            memory,
             flags: AluFlags::new(),
             registers: Registers::new(),
             reg_i: 0,
@@ -921,8 +917,8 @@ impl LegComputer {
 
     pub fn is_halted(&self) -> bool {
         let instruction = Instruction::try_from((
-            self.memory[self.eip as usize],
-            self.memory[self.eip as usize + 1],
+            self.program[self.eip as usize],
+            self.program[self.eip as usize + 1],
         ))
         .unwrap();
         instruction == Instruction::Nop(NopOpcode::Halt)
@@ -966,8 +962,8 @@ impl LegComputer {
 
     pub fn step(&mut self) -> () {
         let instruction = Instruction::try_from((
-            self.memory[self.eip as usize],
-            self.memory[self.eip as usize + 1],
+            self.program[self.eip as usize],
+            self.program[self.eip as usize + 1],
         ))
         .unwrap();
 
@@ -1299,15 +1295,8 @@ impl LegComputer {
 impl FromStr for LegComputer {
     type Err = String;
     fn from_str(source: &str) -> Result<LegComputer, Self::Err> {
-        let mut program = generate_code(&assemble_program(source)?);
-
-        let mut memory: Memory = Vec::with_capacity(256);
-        memory.append(&mut program);
-        while memory.len() < 256 {
-            memory.push(0);
-        }
-
-        Ok(LegComputer::new(memory))
+        let program = generate_code(&assemble_program(source)?);
+        Ok(LegComputer::new(program, vec![0; 256]))
     }
 }
 

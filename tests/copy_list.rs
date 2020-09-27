@@ -38,19 +38,20 @@ JMPR T ? -14
 ";
 
 fn test_reversed_range(source: &str, range_len: Word) -> Result<(), String> {
-    let mut program: Vec<Word> = generate_code(&assemble_program(source)?);
+    let program: Vec<Word> = generate_code(&assemble_program(source)?);
+    let mut memory: Vec<Word> = Vec::with_capacity(256);
 
-    let start_list = (program.len() + 8 - (program.len() % 8)) as u8;
+    let start_list = 8;
     let end_list = start_list + range_len;
 
-    program[2] = start_list;
-    program[3] = end_list;
+    memory.resize(start_list.into(), 0);
+    memory[2] = start_list;
+    memory[3] = end_list;
 
-    program.resize(start_list.into(), 0);
-    program.append(&mut (0..range_len).rev().collect());
-    program.resize(256, 0);
+    memory.append(&mut (0..range_len).rev().collect());
+    memory.resize(256, 0);
 
-    let computer = LegComputer::new(program).run();
+    let computer = LegComputer::new(program, memory).run();
 
     assert_eq!(
         *(0..range_len).rev().collect::<Vec<u8>>().as_slice(),
@@ -61,23 +62,24 @@ fn test_reversed_range(source: &str, range_len: Word) -> Result<(), String> {
 }
 
 fn test_random_list(source: &str, list_len: Word) -> Result<(), String> {
-    let mut program: Vec<Word> = generate_code(&assemble_program(source)?);
+    let program: Vec<Word> = generate_code(&assemble_program(source)?);
+    let mut memory: Vec<Word> = Vec::with_capacity(256);
 
-    let start_list = (program.len() + 8 - (program.len() % 8)) as u8;
+    let start_list = 8;
     let end_list = start_list + list_len;
 
-    program[2] = start_list;
-    program[3] = end_list;
+    memory.resize(start_list.into(), 0);
+    memory[2] = start_list;
+    memory[3] = end_list;
 
     let mut rng = rand::thread_rng();
     let mut input = Vec::new();
     input.resize_with(list_len.into(), || rng.gen());
 
-    program.resize(start_list.into(), 0);
-    program.append(&mut input.clone());
-    program.resize(256, 0);
+    memory.append(&mut input.clone());
+    memory.resize(256, 0);
 
-    let computer = LegComputer::new(program).run();
+    let computer = LegComputer::new(program, memory).run();
 
     assert_eq!(
         input[..],

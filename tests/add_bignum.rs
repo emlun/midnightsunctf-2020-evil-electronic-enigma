@@ -51,37 +51,33 @@ fn add_bignum() -> Result<(), String> {
     JMP T ? 10
     ";
 
-    let mut program: Vec<Word> = generate_code(&assemble_program(source)?);
+    let program: Vec<Word> = generate_code(&assemble_program(source)?);
+    let mut memory: Vec<Word> = Vec::with_capacity(256);
 
     let start_a = 100;
     let end_a = 113;
     let start_b = 200;
     let end_b = 213;
 
-    program[2] = start_a;
-    program[3] = end_a;
-    program[4] = start_b;
-    program[5] = end_b;
+    memory.resize(100, 0);
+    memory[2] = start_a;
+    memory[3] = end_a;
+    memory[4] = start_b;
+    memory[5] = end_b;
 
-    while program.len() < 100 {
-        program.push(0);
-    }
-    program.append(&mut vec![
+    memory.resize(100, 0);
+    memory.append(&mut vec![
         0xe0, 0xd0, 0xc0, 0xb0, 0xa0, 0x90, 0x80, 0x70, 0x60, 0x50, 0x40, 0x30, 0x20, 0x10,
     ]);
 
-    while program.len() < 200 {
-        program.push(0);
-    }
-    program.append(&mut vec![
+    memory.resize(200, 0);
+    memory.append(&mut vec![
         0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
     ]);
 
-    while program.len() < 256 {
-        program.push(0);
-    }
+    memory.resize(256, 0);
 
-    let computer = LegComputer::new(program).run();
+    let computer = LegComputer::new(program, memory).run();
 
     let expected: u128 = (0xe0d0c0b0a0908070605040302010 + 0x1111111111111111111111111111)
         & 0xffffffffffffffffffffffffffff;
