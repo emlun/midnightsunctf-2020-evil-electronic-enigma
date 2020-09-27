@@ -54,7 +54,9 @@ LOAD 2 => C
 LOAD 3 => D
 PUSH C
 PUSH D
-CALLR 4
+CALLR 8
+POP A
+POP A
 HALT
 ";
 
@@ -77,7 +79,7 @@ MOV C => D
 # If next was last element, recurse then return
 SLOAD 2 => A
 ALU ECHO D A => D
-JMPR NE ? 28
+JMPR NE ? 38
 
 PUSH C
 
@@ -86,13 +88,18 @@ PUSH A
 ALU DECR C C => A
 PUSH A
 CALLR -28
-
 POP A
+POP B
+POP B
+
 ALU INCR A A => A
 PUSH A
 SLOAD 2 => A
 PUSH A
-CALLR -40
+CALLR -44
+POP A
+POP A
+POP A
 
 RET C
 
@@ -115,7 +122,7 @@ STOREP B => D
 STOREP A => C
 
 # Loop: LOOP1
-JMPR T ? -52
+JMPR T ? -62
 ";
 
 fn test_reversed_range(source: &str, range_len: Word) -> Result<(), String> {
@@ -182,10 +189,10 @@ fn bubble_sort_random() -> Result<(), String> {
 
 #[test]
 fn quicksort() -> Result<(), String> {
-    test_reversed_range(&format!("{}\n{}", QUICKSORT_PROG, QUICKSORT_FN), 27)
+    test_reversed_range(&format!("{}\n{}", QUICKSORT_PROG, QUICKSORT_FN), 25)
 }
 
 #[test]
 fn quicksort_random() -> Result<(), String> {
-    test_random_list(&format!("{}\n{}", QUICKSORT_PROG, QUICKSORT_FN), 27)
+    test_random_list(&format!("{}\n{}", QUICKSORT_PROG, QUICKSORT_FN), 25)
 }
