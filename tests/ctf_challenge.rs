@@ -2,12 +2,11 @@ use leg_simulator::assemble_program;
 use leg_simulator::generate_code;
 use leg_simulator::LegComputer;
 use leg_simulator::Word;
-use rand::Rng;
 
 // Memory address 2, 3 contain start (inclusive), end (exclusive) of list
 // List is copied to range immediately following it,
 // then the copy is sorted in place,
-// then TODO
+// then XORs the two lists.
 const CHALLENGE_PROG: &str = "
 JMP T ? 4
 HALT
@@ -17,7 +16,7 @@ LOAD 1 => D
 PUSH C
 PUSH D
 PUSH D
-CALLR 52
+CALLR 48
 POP C
 POP D
 POP D
@@ -28,26 +27,21 @@ ALU ADD C D => D
 ALU DECR D D => D
 PUSH C
 PUSH D
-CALLR 56
+CALLR 90
 POP A
 POP D
-POP C
+ALU INCR D D => D
+PUSH D
 
 LOAD 0 => B
-
-LOAD 1 => D
-ALU ECHO B D => B
-JMPR LT ? 4
+PUSH B
+MOVC 8 => B
+STORE B => 2
+PUSH B
+CALLR 32
+POP A
+STORE A => 3
 HALT
-
-LOADP B => D
-ALU XOR A D => A
-LOADP C => D
-ALU XOR A D => A
-ALU INCR B B => B
-ALU INCR C C => C
-
-JMPR T ? -20
 ";
 
 // Stack offset 4, 3 contain start (inclusive), end (exclusive) of list
@@ -68,6 +62,37 @@ STOREP D => C
 ALU INCR A A => A
 ALU INCR C C => C
 JMPR T ? -16
+";
+
+// Stack offset 5, 4 contain start (inclusive), end (exclusive) of list 1
+// Stack offset 3 contains start (inclusive) of list 2
+// offset 2 contains start (inclusive) of xor destination
+// returns end (exclusive) of xor destination
+const XOR_LIST_FN: &str = "
+# Function: xor list
+SLOAD 5 => C
+SLOAD 3 => B
+SLOAD 2 => D
+PUSH D
+
+SLOAD 4 => D
+
+ALU ECHO C D => C
+JMPR LT ? 6
+POP D
+RET D
+
+LOADP B => A
+LOADP C => D
+ALU XOR A D => A
+POP D
+STOREP A => D
+ALU INCR B B => B
+ALU INCR C C => C
+ALU INCR D D => D
+PUSH D
+
+JMPR T ? -28
 ";
 
 // Stack offset 3, 2 contain start (inclusive), end (inclusive) of list
@@ -137,7 +162,10 @@ JMPR T ? -62
 
 #[test]
 fn test_ctf() -> Result<(), String> {
-    let source = &format!("{}\n{}\n{}", CHALLENGE_PROG, COPY_LIST_FN, QUICKSORT_FN);
+    let source = &format!(
+        "{}\n{}\n{}\n{}",
+        CHALLENGE_PROG, COPY_LIST_FN, XOR_LIST_FN, QUICKSORT_FN
+    );
     let program: Vec<Word> = generate_code(&assemble_program(source)?);
     let mut memory: Vec<Word> = Vec::with_capacity(256);
 
@@ -147,7 +175,13 @@ fn test_ctf() -> Result<(), String> {
         v.sort();
         v
     };
-    let start_list = 8;
+    let solution_xor: Vec<u8> = input
+        .iter()
+        .zip(sorted_input.iter())
+        .map(|(a, b)| a ^ b)
+        .collect();
+
+    let start_list = (input.len() + 8 + (8 - input.len() % 8)) as u8;
     let end_list = start_list + input.len() as u8;
 
     memory.resize(start_list.into(), 0);
@@ -169,7 +203,10 @@ fn test_ctf() -> Result<(), String> {
         computer.memory
             [(usize::from(start_list) + input.len())..(usize::from(end_list) + input.len())]
     );
-    assert!(false);
+    assert_eq!(
+        solution_xor[..],
+        computer.memory[8..(8 + solution_xor.len())]
+    );
 
     Ok(())
 }
