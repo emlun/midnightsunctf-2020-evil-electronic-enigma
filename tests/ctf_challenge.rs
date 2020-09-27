@@ -12,8 +12,8 @@ const CHALLENGE_PROG: &str = "
 JMP T ? 4
 HALT
 
-LOAD 2 => C
-LOAD 3 => D
+LOAD 0 => C
+LOAD 1 => D
 PUSH C
 PUSH D
 PUSH D
@@ -33,9 +33,9 @@ POP A
 POP D
 POP C
 
-LOAD 2 => B
+LOAD 0 => B
 
-LOAD 3 => D
+LOAD 1 => D
 ALU ECHO B D => B
 JMPR LT ? 4
 HALT
@@ -141,7 +141,7 @@ fn test_ctf() -> Result<(), String> {
     let program: Vec<Word> = generate_code(&assemble_program(source)?);
     let mut memory: Vec<Word> = Vec::with_capacity(256);
 
-    let input = b"midnight{f1ddlin_m4_bit5}";
+    let input = b"midnight{f1ddlin_wi_m4_bi75}";
     let sorted_input = {
         let mut v = input.to_vec();
         v.sort();
@@ -151,8 +151,8 @@ fn test_ctf() -> Result<(), String> {
     let end_list = start_list + input.len() as u8;
 
     memory.resize(start_list.into(), 0);
-    memory[2] = start_list;
-    memory[3] = end_list;
+    memory[0] = start_list;
+    memory[1] = end_list;
 
     memory.append(&mut input.to_vec());
     memory.resize(256, 0);
