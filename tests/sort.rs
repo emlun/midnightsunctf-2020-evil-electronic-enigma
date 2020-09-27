@@ -127,15 +127,9 @@ fn test_reversed_range(source: &str, range_len: Word) -> Result<(), String> {
     program[2] = start_list;
     program[3] = end_list;
 
-    while program.len() < start_list.into() {
-        program.push(0);
-    }
-    for i in (0..range_len).rev() {
-        program.push(i);
-    }
-    while program.len() < 256 {
-        program.push(0);
-    }
+    program.resize(start_list.into(), 0);
+    program.append(&mut (0..range_len).rev().collect());
+    program.resize(256, 0);
 
     let computer = LegComputer::new(program).run();
 
@@ -158,19 +152,11 @@ fn test_random_list(source: &str, list_len: Word) -> Result<(), String> {
 
     let mut rng = rand::thread_rng();
     let mut input = Vec::new();
-    while input.len() < list_len.into() {
-        input.push(rng.gen());
-    }
+    input.resize_with(list_len.into(), || rng.gen());
 
-    while program.len() < start_list.into() {
-        program.push(0);
-    }
-    for i in (0..list_len).rev() {
-        program.push(input[usize::from(i)]);
-    }
-    while program.len() < 256 {
-        program.push(0);
-    }
+    program.resize(start_list.into(), 0);
+    program.append(&mut input.clone());
+    program.resize(256, 0);
 
     let computer = LegComputer::new(program).run();
 
