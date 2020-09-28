@@ -265,7 +265,7 @@ fn run_ctf(input: &[u8]) -> Result<LegComputer, String> {
         v
     };
 
-    let correct_input = b"midnight{f1ddlin_wi_m4_bi75}";
+    let correct_input = b"midnight{f1D)l3n_w/_M4_bi75~}";
     let sorted_correct_input = {
         let mut v = correct_input.to_vec();
         v.sort();
@@ -314,7 +314,7 @@ fn run_ctf(input: &[u8]) -> Result<LegComputer, String> {
 
 #[test]
 fn test_ctf_correct() -> Result<(), String> {
-    let input = b"midnight{f1ddlin_wi_m4_bi75}";
+    let input = b"midnight{f1D)l3n_w/_M4_bi75~}";
     let computer = run_ctf(input)?;
     assert_eq!(b"OK"[..], computer.memory[0..2]);
 
@@ -325,6 +325,18 @@ fn test_ctf_correct() -> Result<(), String> {
 fn test_ctf_incorrect() -> Result<(), String> {
     let input = b"midnight{fiddlin_wi_ma_bits}";
     let computer = run_ctf(input)?;
+    assert_eq!(b"ERR"[..], computer.memory[0..3]);
+
+    Ok(())
+}
+
+#[test]
+fn test_ctf_offset() -> Result<(), String> {
+    let input: Vec<u8> = b"midnight{f1D)l3n_w/_M4_bi75~}"
+        .iter()
+        .map(|b| b + 1)
+        .collect();
+    let computer = run_ctf(&input)?;
     assert_eq!(b"ERR"[..], computer.memory[0..3]);
 
     Ok(())
