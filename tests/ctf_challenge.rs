@@ -1,8 +1,8 @@
-use leg_simulator::assemble_program;
-use leg_simulator::generate_code;
-use leg_simulator::LegComputer;
-use leg_simulator::RegisterRef;
-use leg_simulator::Word;
+use evil_electronic_enigma::assemble_program;
+use evil_electronic_enigma::generate_code;
+use evil_electronic_enigma::LegComputer;
+use evil_electronic_enigma::RegisterRef;
+use evil_electronic_enigma::Word;
 
 // Memory address 0, 1 contain start (inclusive), end (exclusive) of list
 // Memory address 2 contains start (inclusive) of correct result
