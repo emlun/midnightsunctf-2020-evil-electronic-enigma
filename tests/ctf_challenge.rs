@@ -277,14 +277,14 @@ fn run_ctf(input: &[u8]) -> Result<LegComputer, String> {
         .map(|(a, b)| a ^ b)
         .collect();
 
-    let start_solution = 8 as u8;
-    let start_list = start_solution + solution_xor.len() as u8;
-    let end_list = start_list + input.len() as u8;
+    let start_solution = 8;
+    let start_list = start_solution + solution_xor.len();
+    let end_list = start_list + input.len();
 
-    memory.resize(start_solution as usize, 0);
-    memory[0] = start_list;
-    memory[1] = end_list;
-    memory[2] = start_solution;
+    memory.resize(start_solution, 0);
+    memory[0] = start_list as u8;
+    memory[1] = end_list as u8;
+    memory[2] = start_solution as u8;
 
     memory.extend(&solution_xor);
 
@@ -306,7 +306,7 @@ fn run_ctf(input: &[u8]) -> Result<LegComputer, String> {
     );
     assert_eq!(
         solution_xor[..],
-        computer.memory[8..(8 + solution_xor.len())]
+        computer.memory[start_solution..(start_solution + solution_xor.len())]
     );
 
     Ok(computer)
