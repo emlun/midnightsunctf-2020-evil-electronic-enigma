@@ -222,11 +222,11 @@ HALT
     let start_list = 32 as u8;
     let end_list = start_list + input.len() as u8;
 
-    memory.append(&mut solution_xor.clone());
+    memory.extend(&solution_xor);
     memory.resize(start_list.into(), 0);
-    memory.append(&mut input.to_vec());
+    memory.extend(input);
     memory.resize(64, 0);
-    memory.append(&mut sorted_input.clone());
+    memory.extend(&sorted_input);
     memory.resize(256, 0);
 
     let computer = LegComputer::new(program, memory).run();
@@ -286,10 +286,10 @@ fn run_ctf(input: &[u8]) -> Result<LegComputer, String> {
     memory[1] = end_list;
     memory[2] = start_solution;
 
-    memory.append(&mut solution_xor.clone());
+    memory.extend(&solution_xor);
 
     memory.resize(start_list.into(), 0);
-    memory.append(&mut input.to_vec());
+    memory.extend(input);
     memory.resize(256, 0);
 
     let computer = LegComputer::new(program, memory).run();
