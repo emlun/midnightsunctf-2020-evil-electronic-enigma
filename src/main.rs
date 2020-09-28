@@ -1,4 +1,6 @@
-use leg_simulator::LegComputer;
+mod leg_computer;
+
+use leg_computer::LegComputer;
 use std::io::Read;
 
 const PROGRAM: &[u8] = &[
