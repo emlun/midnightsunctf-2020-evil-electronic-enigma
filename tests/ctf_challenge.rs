@@ -6,17 +6,19 @@ use leg_simulator::Word;
 
 // Memory address 0, 1 contain start (inclusive), end (exclusive) of list
 // Memory address 2 contains start (inclusive) of correct result
+// Memory address 4, 5 contain start (inclusive), end (inclusive) of output for correct
+// Memory address 6, 7 contain start (inclusive), end (inclusive) of output for incorrect
 // List is copied to range immediately following it,
 // then the copy is sorted in place,
 // then the XOR of the two lists is compared against the correct result.
-// Writes "OK" to address 0..=1 if equal, or "ERR" to address 0..=2 otherwise.
+// Writes output for correct at address 0 if equal, or output for incorrect otherwise.
 const CHALLENGE_PROG: &str = "
 LOAD 0 => C
 LOAD 1 => D
 PUSH C
 PUSH D
 PUSH D
-CALLR 68
+CALLR 72
 POP C
 POP D
 POP D
@@ -27,7 +29,7 @@ ALU ADD C D => D
 ALU DECR D D => D
 PUSH C
 PUSH D
-CALLR 124
+CALLR 128
 POP A
 POP D
 ALU INCR D D => D
@@ -37,22 +39,24 @@ LOAD 0 => B
 PUSH B
 LOAD 2 => B
 PUSH B
-CALLR 54
+CALLR 58
 POP A
 
 ALU ECHO A A => A
-JMPR Z ? 14
-MOVC 69 => A
-STORE A => 0
-MOVC 82 => A
-STORE A => 1
-STORE A => 2
-HALT
+JMPR Z ? 8
+LOAD 6 => C
+LOAD 7 => D
+JMPR T ? 8
+LOAD 4 => C
+LOAD 5 => D
+NOP
 
-MOVC 79 => A
-STORE A => 0
-MOVC 75 => A
-STORE A => 1
+MOVC 0 => B
+LOADP C => A
+STOREP A => B
+ALU INCR B B => B
+ALU INCR C D => C
+JMPR LT ? -8
 HALT
 ";
 
@@ -277,15 +281,26 @@ fn run_ctf(input: &[u8]) -> Result<LegComputer, String> {
         .map(|(a, b)| a ^ b)
         .collect();
 
-    let start_solution = 8;
+    let start_ok = 8;
+    let start_err = start_ok + 4;
+    let start_solution = start_err + 4;
     let start_list = start_solution + solution_xor.len();
     let end_list = start_list + input.len();
 
-    memory.resize(start_solution, 0);
+    memory.resize(start_ok, 0);
+    memory.extend(b"OK!");
+    memory.resize(start_err, 0);
+    memory.extend(b"ERR");
+
     memory[0] = start_list as u8;
     memory[1] = end_list as u8;
     memory[2] = start_solution as u8;
+    memory[4] = start_ok as u8;
+    memory[5] = (start_ok + 3) as u8;
+    memory[6] = start_err as u8;
+    memory[7] = (start_err + 3) as u8;
 
+    memory.resize(start_solution, 0);
     memory.extend(&solution_xor);
 
     memory.resize(start_list.into(), 0);
@@ -316,7 +331,7 @@ fn run_ctf(input: &[u8]) -> Result<LegComputer, String> {
 fn test_ctf_correct() -> Result<(), String> {
     let input = b"midnight{f1D)l3n_w/_M4_bi75~}";
     let computer = run_ctf(input)?;
-    assert_eq!(b"OK"[..], computer.memory[0..2]);
+    assert_eq!(b"OK!"[..], computer.memory[0..3]);
 
     Ok(())
 }
